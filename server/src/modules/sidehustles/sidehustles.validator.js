@@ -1,0 +1,5 @@
+import { z } from 'zod'
+const dayEnum = z.enum(['MON','TUE','WED','THU','FRI','SAT','SUN'])
+const groupEnum = z.enum(['STUDENT','FREELANCER','UNEMPLOYED','PART_TIME_WORKER','SENIOR_CITIZEN','PWD','OTHER'])
+export const createSideHustleSchema = z.object({ body: z.object({ title: z.string().min(1,'Title is required'), description: z.string().min(1,'Description is required'), requiredSkills: z.array(z.string()).default([]), category: z.array(z.string()).default([]), experienceLevelRequired: z.enum(['NONE','BEGINNER','INTERMEDIATE','EXPERIENCED']).optional(), estimatedWeeklyHours: z.number().min(0).optional(), workMode: z.enum(['REMOTE','ONSITE','HYBRID']).optional(), requiredDays: z.array(dayEnum).optional(), location: z.string().optional(), payType: z.enum(['HOURLY','PER_TASK','FIXED','COMMISSION']).optional(), payAmountMin: z.number().min(0).optional(), payAmountMax: z.number().min(0).optional(), status: z.enum(['ACTIVE','CLOSED','DRAFT']).optional(), suitableFor: z.array(groupEnum).optional() }) })
+export const updateSideHustleSchema = z.object({ body: createSideHustleSchema.shape.body.partial() })

@@ -1,0 +1,3 @@
+import { z } from 'zod'
+export const createIncomeEntrySchema=z.object({body:z.object({sideHustleId:z.string().min(1).optional(),title:z.string().min(1,'Title is required'),amountEarned:z.number().min(0),hoursSpent:z.number().min(0).optional(),status:z.enum(['IN_PROGRESS','COMPLETED','CANCELLED']).optional(),notes:z.string().optional()})})
+export const updateIncomeEntrySchema=z.object({body:z.object({title:z.string().min(1).optional(),amountEarned:z.number().min(0).optional(),hoursSpent:z.number().min(0).optional(),status:z.enum(['IN_PROGRESS','COMPLETED','CANCELLED']).optional(),notes:z.string().optional()})})
