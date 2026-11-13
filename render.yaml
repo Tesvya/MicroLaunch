@@ -1,0 +1,44 @@
+# Render "Blueprint": one web service that serves BOTH the website and the API (same domain => no CORS/cookie problems).
+# NOTE: written from Render's documented format but not run against Render itself; the build/start commands inside
+# were verified in a clean simulated deploy. If Render rejects a field, use the manual settings in DEPLOYMENT.md.
+services:
+  - type: web
+    name: microlaunch
+    runtime: node
+    plan: free
+    region: singapore          # closest free region to the Philippines
+    # --include=dev is REQUIRED: hosts set NODE_ENV=production while installing, which would skip Vite and break the build.
+    buildCommand: cd web && npm install --include=dev && npm run build && cd ../server && npm install && npm run build
+    startCommand: cd server && npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true     # Render creates a long random secret for you
+      - key: DATABASE_URL
+        sync: false             # you paste your MongoDB Atlas connection string in the Render dashboard
+      # CLIENT_PRODUCTION / SERVER_URL are optional on Render: the app reads Render's own RENDER_EXTERNAL_URL.
+      # Optional: email (see DEPLOYMENT.md), payments, and tuning
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: PAYMONGO_SECRET_KEY
+        sync: false
+      - key: PAYMONGO_WEBHOOK_SECRET
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_MODE
+        value: sandbox
