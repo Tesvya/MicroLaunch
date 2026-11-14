@@ -86,18 +86,58 @@ export const verifyEmail = async (req, res) => {
 }
 
 export const resendVerification = async (req, res) => {
-    // Always answers the same way so this endpoint cannot be used to discover which emails are registered.
-    const generic = { message: 'If that account exists and is not yet verified, a new verification email has been sent.' }
+    const generic = {
+        message: 'If that account exists and is not yet verified, a new verification email has been sent.'
+    };
+
     try {
-        const { email } = req.validatedData.body
-        const user = await User.findOne({ email }).select('+emailVerificationSentAt')
-        if (!user || user.isEmailVerified) return res.status(200).json(generic)
-        const since = Date.now() - (user.emailVerificationSentAt ? user.emailVerificationSentAt.getTime() : 0)
-        if (since < RESEND_COOLDOWN_MS) return res.status(200).json(generic)
-        const { devVerificationUrl } = await issueVerification(user)
-        return res.status(200).json({ ...generic, properties: { devVerificationUrl } })
-    } catch (error) { return res.status(500).json({ message: error.message }) }
-}
+        const { email } = req.validatedData.body;
+
+        console.log('[Resend] Request received');
+
+        const user = await User.findOne({ email })
+            .select('+emailVerificationSentAt');
+
+        console.log('[Resend] User found:', !!user);
+
+        if (!user || user.isEmailVerified) {
+            console.log('[Resend] User missing or already verified');
+            return res.status(200).json(generic);
+        }
+
+        console.log('[Resend] Already verified:', user.isEmailVerified);
+        console.log('[Resend] Has timestamp:', !!user.emailVerificationSentAt);
+
+        const since = Date.now() -
+            (user.emailVerificationSentAt
+                ? user.emailVerificationSentAt.getTime()
+                : 0);
+
+        const remaining = RESEND_COOLDOWN_MS - since;
+
+        console.log('[Resend] Cooldown remaining (ms):', Math.max(0, remaining));
+
+        if (since < RESEND_COOLDOWN_MS) {
+            console.log('[Resend] Blocked by cooldown');
+            return res.status(200).json(generic);
+        }
+
+        console.log('[Resend] Calling issueVerification');
+
+        const { sent, devVerificationUrl } = await issueVerification(user);
+
+        console.log('[Resend] Email sending result:', sent);
+
+        return res.status(200).json({
+            ...generic,
+            properties: { emailSent: sent, devVerificationUrl }
+        });
+
+    } catch (error) {
+        console.error('[Resend] Error:', error.message);
+        return res.status(500).json({ message: error.message });
+    }
+};
 
 export const login = async (req, res) => {
     try {
