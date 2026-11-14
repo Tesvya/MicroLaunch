@@ -86,7 +86,7 @@ export const verifyEmail = async (req, res) => {
 }
 
 export const resendVerification = async (req, res) => {
-    console.log('🔥 MICROLAUNCH RESEND CONTROLLER HIT 🔥');
+    console.log('MICROLAUNCH RESEND CONTROLLER HIT');
     const generic = {
         message: 'If that account exists and is not yet verified, a new verification email has been sent.'
     };
