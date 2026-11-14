@@ -19,7 +19,7 @@ const getTransporter = () => {
 export const escapeHtml = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
 /** Sends an email. With no SMTP configured it logs the message instead (dev fallback) and returns { sent:false }. */
-export const sendMail = async ({ to, subject, text, html }) => {
+/*export const sendMail = async ({ to, subject, text, html }) => {
     if (!isMailConfigured()) {
         if (process.env.NODE_ENV === 'production') console.log(`[Mail] SMTP not configured: email to ${to} was NOT sent. An admin can verify the account from Manage Users.`)
         else console.log(`\n[Mail:DEV] SMTP not configured, email NOT sent.\n  To: ${to}\n  Subject: ${subject}\n  ${text}\n`)
@@ -28,6 +28,47 @@ export const sendMail = async ({ to, subject, text, html }) => {
     await getTransporter().sendMail({ from: process.env.MAIL_FROM || `MICROLAUNCH <${process.env.SMTP_USER}>`, to, subject, text, html })
     return { sent: true }
 }
+*/
+
+export const sendMail = async ({ to, subject, text, html }) => {
+    console.log('[Mail] Checking SMTP configuration:', {
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        userConfigured: Boolean(process.env.SMTP_USER),
+        passwordConfigured: Boolean(process.env.SMTP_PASS)
+    });
+
+    if (!isMailConfigured()) {
+        console.error('[Mail] SMTP configuration is incomplete.');
+        return { sent: false };
+    }
+
+    try {
+        const info = await getTransporter().sendMail({
+            from: process.env.MAIL_FROM || `MICROLAUNCH <${process.env.SMTP_USER}>`,
+            to,
+            subject,
+            text,
+            html
+        });
+
+        console.log('[Mail] Successfully submitted:', {
+            messageId: info.messageId,
+            accepted: info.accepted,
+            rejected: info.rejected
+        });
+
+        return { sent: true };
+    } catch (error) {
+        console.error('[Mail] SMTP sending failed:', {
+            message: error.message,
+            code: error.code,
+            response: error.response
+        });
+
+        throw error;
+    }
+};
 
 export const verificationEmail = ({ name, url }) => ({
     subject: 'Verify your MICROLAUNCH account',
