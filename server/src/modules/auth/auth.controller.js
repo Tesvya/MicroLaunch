@@ -14,19 +14,46 @@ const clientBase = () => publicClientUrl()
 
 /** Creates a fresh token (invalidating any older one), saves its hash, and emails the link. */
 const issueVerification = async (user) => {
-    const token = crypto.randomBytes(32).toString('hex')
-    user.emailVerificationTokenHash = hashToken(token)
-    user.emailVerificationExpires = new Date(Date.now() + TOKEN_TTL_MS)
-    user.emailVerificationSentAt = new Date()
-    await user.save()
-    const url = `${clientBase()}/verify-email?token=${token}`
-    let sent = false
-    try { sent = (await sendMail({ to: user.email, ...verificationEmail({ name: user.name, url }) })).sent }
-    catch (error) { console.error('[Mail] Failed to send verification email:', error.message) }
-    // Dev convenience only: when no email could be sent and we are not in production, hand the link back.
-    const devVerificationUrl = !sent && process.env.NODE_ENV !== 'production' ? url : undefined
-    return { sent, devVerificationUrl }
-}
+    const token = crypto.randomBytes(32).toString('hex');
+
+    user.emailVerificationTokenHash = hashToken(token);
+    user.emailVerificationExpires = new Date(Date.now() + TOKEN_TTL_MS);
+
+    // Clear previous timestamp so failed attempts don't trigger cooldown.
+    user.emailVerificationSentAt = null;
+    await user.save();
+
+    const url = `${clientBase()}/verify-email?token=${token}`;
+
+    let sent = false;
+
+    try {
+        const result = await sendMail({
+            to: user.email,
+            ...verificationEmail({ name: user.name, url })
+        });
+
+        sent = result.sent;
+
+        if (sent) {
+            user.emailVerificationSentAt = new Date();
+            await user.save();
+        }
+    } catch (error) {
+        console.error('[Verification] Email failed:', {
+            message: error.message,
+            code: error.code,
+            response: error.response
+        });
+    }
+
+    const devVerificationUrl =
+        !sent && process.env.NODE_ENV !== 'production'
+            ? url
+            : undefined;
+
+    return { sent, devVerificationUrl };
+};
 
 export const register = async (req, res) => {
     try {
