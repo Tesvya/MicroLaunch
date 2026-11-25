@@ -51,7 +51,8 @@ PAYPAL_MODE=sandbox
 | Applications | Apply, cancel, admin approve/reject/complete |
 | Income Tracker | Log entries, edit, complete, chart, goal progress |
 | Ratings | 1-5 star ratings with accurate-match flag |
-| Payments | GCash/Maya (PayMongo), PayPal, mock fallback |
+| Payouts | User requests, admin confirms the job was completed and approves (GCash/Maya via PayMongo, PayPal, mock fallback) |
+| PWD verification | User uploads PWD card/documents, admin approves or rejects; unverified PWD does not affect matching |
 | Notifications | In-app notifications with unread badge |
 | Reports | Admin generates 6 report types |
 | Activity Logs | Audit trail of all admin actions |

@@ -10,7 +10,6 @@ import MyApplications from '../pages/dashboard/user/MyApplications'
 import Favorites from '../pages/dashboard/user/Favorites'
 import Notifications from '../pages/dashboard/user/Notifications'
 import Transactions from '../pages/dashboard/user/Transactions'
-import { PaymentSuccess, PaymentCancel } from '../pages/dashboard/user/PaymentRedirect'
 export const UserRoutes = [
     {
         path: '/app',
@@ -25,9 +24,7 @@ export const UserRoutes = [
             { path: 'transactions', element: <Transactions /> },
             { path: 'ratings', element: <Ratings /> },
             { path: 'notifications', element: <Notifications /> },
-            { path: 'profile', element: <Profile /> },
-            { path: 'payments/paypal/success', element: <PaymentSuccess /> },
-            { path: 'payments/paypal/cancel', element: <PaymentCancel /> }
+            { path: 'profile', element: <Profile /> }
         ]
     }
 ]

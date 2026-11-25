@@ -1,16 +1,20 @@
 import crypto from 'crypto'
+import IncomeEntry from '../income/models/income-entry.model.js'
 import Transaction from '../transactions/models/transaction.model.js'
 import { createNotification } from '../notifications/notifications.controller.js'
 import { publicClientUrl } from '../../shared/utils/urls.js'
-import { createPaymongoLink, createPaypalOrder, capturePaypalOrder, retrievePaymongoLink, getPaypalOrder } from './gateway.js'
+import { capturePaypalOrder, retrievePaymongoLink, getPaypalOrder } from './gateway.js'
 
-const genRef = () => `ML-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
-const peso = (n) => `\u20b1${Number(n).toLocaleString('en-PH')}`
+export const peso = (n) => `\u20b1${Number(n).toLocaleString('en-PH')}`
 
-const markSuccess = async (t, rawResponse) => {
+export const markSuccess = async (t, rawResponse) => {
     t.status = 'SUCCESS'; t.simulatedGatewayResponse = rawResponse; t.completedAt = new Date(); await t.save()
-    await createNotification({ userId: t.userId, notificationType: 'PAYMENT', title: 'Payment confirmed', message: `Payment of ${peso(t.amount)} (${t.referenceNumber}) confirmed.` })
+    if (t.incomeEntryId) await IncomeEntry.updateOne({ _id: t.incomeEntryId }, { $set: { payoutStatus: 'PAID' } })
+    await createNotification({ userId: t.userId, notificationType: 'PAYMENT', title: 'Payment confirmed', message: `Your payout of ${peso(t.amount)} (${t.referenceNumber}) was approved and paid.` })
 }
+
+// Users never see the checkout link: the admin is the one who pays.
+export const forUser = (t) => { const o = t.toObject(); delete o.checkoutUrl; delete o.simulatedGatewayResponse; return o }
 
 /** Asks the payment provider (the source of truth) for the current state of a pending transaction and updates it. */
 const refreshFromProvider = async (t) => {
@@ -25,37 +29,20 @@ const refreshFromProvider = async (t) => {
     return t
 }
 
-export const initiatePayment = async (req, res) => {
-    try {
-        const { incomeEntryId, amount, method } = req.body
-        if (!amount || amount <= 0) return res.status(400).json({ message: 'Valid amount required' })
-        if (!['GCASH', 'MAYA', 'PAYPAL', 'MOCK_GCASH', 'MOCK_BANK_TRANSFER', 'MOCK_CARD'].includes(method)) return res.status(400).json({ message: 'Invalid payment method' })
-        const referenceNumber = genRef(); const description = `MICROLAUNCH payout - ${referenceNumber}`
-        const isMock = method.startsWith('MOCK') || (!process.env.PAYMONGO_SECRET_KEY && ['GCASH', 'MAYA'].includes(method)) || (!process.env.PAYPAL_CLIENT_ID && method === 'PAYPAL')
-        let gr
-        if (isMock) gr = { provider: 'MOCK_GATEWAY', method, checkoutUrl: null, referenceId: referenceNumber, status: 'SUCCESS', rawResponse: { note: 'Simulated. No real funds moved.', processedAt: new Date().toISOString() } }
-        else if (['GCASH', 'MAYA'].includes(method)) gr = await createPaymongoLink({ amount, description, method, metadata: { referenceNumber } })
-        else gr = await createPaypalOrder({ amount, description, referenceNumber })
-        const transaction = await Transaction.create({ userId: req.user._id, incomeEntryId: incomeEntryId || null, provider: gr.provider, method: gr.method, amount, referenceNumber, gatewayReferenceId: gr.referenceId, status: gr.status, checkoutUrl: gr.checkoutUrl || null, simulatedGatewayResponse: gr.rawResponse, completedAt: gr.status === 'SUCCESS' ? new Date() : null })
-        if (gr.status === 'SUCCESS') await createNotification({ userId: req.user._id, notificationType: 'PAYMENT', title: 'Payment processed', message: `Payout of ${peso(amount)} (${referenceNumber}) processed successfully.` })
-        return res.status(201).json({ message: gr.checkoutUrl ? 'Redirect to payment gateway' : 'Payment processed', properties: { transaction, checkoutUrl: gr.checkoutUrl || null } })
-    } catch (error) { console.error('[Payments]', error?.response?.data || error.message); return res.status(500).json({ message: 'Payment gateway error: ' + error.message }) }
-}
-
 // PayPal sends the buyer's browser here after they approve. We capture the money, then send them back to the site.
 export const capturePaypal = async (req, res) => {
     const site = publicClientUrl()
     try {
         const orderId = req.query.token
-        if (!orderId) return res.redirect(`${site}/app/payments/paypal/cancel`)
+        if (!orderId) return res.redirect(`${site}/admin/payouts?paypal=cancel`)
         const t = await Transaction.findOne({ gatewayReferenceId: String(orderId), provider: 'PAYPAL' })
-        if (!t) return res.redirect(`${site}/app/payments/paypal/cancel`)
+        if (!t) return res.redirect(`${site}/admin/payouts?paypal=cancel`)
         if (t.status === 'PENDING') {
             const result = await capturePaypalOrder(orderId)
             if (result.status === 'SUCCESS') await markSuccess(t, result.rawResponse)
         }
-        return res.redirect(`${site}/app/payments/paypal/success?ref=${encodeURIComponent(t.referenceNumber)}`)
-    } catch (error) { console.error('[PayPal capture]', error?.response?.data || error.message); return res.redirect(`${site}/app/payments/paypal/cancel`) }
+        return res.redirect(`${site}/admin/payouts?paypal=success&ref=${encodeURIComponent(t.referenceNumber)}`)
+    } catch (error) { console.error('[PayPal capture]', error?.response?.data || error.message); return res.redirect(`${site}/admin/payouts?paypal=cancel`) }
 }
 
 /**
@@ -88,14 +75,15 @@ export const paymongoWebhook = async (req, res) => {
 
 export const verifyPayment = async (req, res) => {
     try {
-        const t = await Transaction.findOne({ _id: req.params.id, userId: req.user._id })
+        const isAdmin = req.user.roleId?.name === 'ADMIN'
+        const t = await Transaction.findOne({ _id: req.params.id, ...(isAdmin ? {} : { userId: req.user._id }) })
         if (!t) return res.status(404).json({ message: 'Transaction not found' })
         await refreshFromProvider(t)
-        return res.status(200).json({ properties: { transaction: t } })
+        return res.status(200).json({ properties: { transaction: forUser(t) } })
     } catch (error) { return res.status(500).json({ message: 'Could not verify payment: ' + (error?.response?.data?.errors?.[0]?.detail || error.message) }) }
 }
 
 export const listMyTransactions = async (req, res) => {
-    try { return res.status(200).json({ properties: { transactions: await Transaction.find({ userId: req.user._id }).sort({ createdAt: -1 }) } }) }
+    try { return res.status(200).json({ properties: { transactions: await Transaction.find({ userId: req.user._id }).select('-checkoutUrl -simulatedGatewayResponse').populate('incomeEntryId', 'title').sort({ createdAt: -1 }) } }) }
     catch (error) { return res.status(500).json({ message: error.message }) }
 }

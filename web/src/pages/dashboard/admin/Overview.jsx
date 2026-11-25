@@ -91,19 +91,20 @@ const AdminOverview = () => {
                 />
             </div>
 
-            {overview?.pendingApplications > 0 ? (
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-100/30 p-4">
+            {[
+                { count: overview?.pendingApplications, label: 'application', to: '/admin/applications' },
+                { count: overview?.pendingPayouts, label: 'payout request', to: '/admin/payouts' },
+                { count: overview?.pendingPwdVerifications, label: 'PWD verification', to: '/admin/pwd-verifications' }
+            ].filter((x) => x.count > 0).map((x) => (
+                <div key={x.to} className="rounded-2xl border border-amber-500/20 bg-amber-100/30 p-4">
                     <p className="text-sm font-medium text-amber-600">
-                        {overview.pendingApplications} application{overview.pendingApplications > 1 ? 's' : ''} waiting for review.
+                        {x.count} {x.label}{x.count > 1 ? 's' : ''} waiting for review.
                     </p>
-                    <Link
-                        to="/admin/applications"
-                        className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:underline"
-                    >
+                    <Link to={x.to} className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:underline">
                         Review now <LuArrowRight className="h-3.5 w-3.5" />
                     </Link>
                 </div>
-            ) : null}
+            ))}
         </div>
     )
 }

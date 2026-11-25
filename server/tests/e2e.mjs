@@ -180,12 +180,41 @@ check('goal progress computed (50%)', s?.goalProgressPercent === 50, String(s?.g
 check('6 month trend returned', s?.monthlyTrend?.length === 6)
 
 // ---- PAYMENT (mock) ----
-r = await user.req('POST', '/payments/initiate', { incomeEntryId: entryId, amount: 2000, method: 'MOCK_GCASH' })
-check('mock payout succeeds + saved', r.status === 201 && r.data?.properties?.transaction?.status === 'SUCCESS', JSON.stringify(r.data))
-r = await user.req('POST', '/payments/initiate', { incomeEntryId: entryId, amount: 2000, method: 'GCASH' })
-check('GCASH without keys falls back to mock', r.status === 201 && r.data?.properties?.transaction?.provider === 'MOCK_GATEWAY', JSON.stringify(r.data))
-r = await user.req('POST', '/payments/initiate', { amount: 100, method: 'BITCOIN' })
+r = await user.req('POST', '/payments/request', { incomeEntryId: entryId, method: 'BITCOIN' })
 check('invalid payment method rejected', r.status === 400)
+r = await user.req('POST', '/payments/request', { incomeEntryId: manualId, method: 'MOCK_GCASH' })
+check('manual entry cannot request a payout (400)', r.status === 400 && /manual/i.test(r.data?.message || ''), JSON.stringify(r.data))
+{
+  const both = await Promise.all([1, 2, 3].map(() => user.req('POST', '/payments/request', { incomeEntryId: entryId, method: 'GCASH', amount: 999999 })))
+  check('simultaneous requests create exactly one payout', both.filter((x) => x.status === 201).length === 1 && both.filter((x) => x.status === 409).length === 2, both.map((x) => x.status).join())
+  r = both.find((x) => x.status === 201)
+}
+const payout1 = r?.data?.properties?.transaction
+check('request waits for approval; amount comes from the entry, not the client', payout1?.status === 'REQUESTED' && payout1?.amount === 2000, JSON.stringify(r?.data))
+r = await user.req('PUT', `/income/entries/${entryId}`, { amountEarned: 50000 }); check('entry is locked while under review (409)', r.status === 409)
+r = await user.req('DELETE', `/income/entries/${entryId}`); check('locked entry cannot be deleted (409)', r.status === 409)
+r = await user.req('POST', `/payments/${payout1._id}/approve`, { jobConfirmed: true }); check('user cannot approve their own payout (403)', r.status === 403)
+r = await user.req('GET', '/payments/admin/all'); check('user cannot list all payouts (403)', r.status === 403)
+r = await admin.req('GET', '/payments/admin/all?status=REQUESTED')
+{ const row = r.data?.properties?.payouts?.find((x) => x._id === payout1._id); check('admin sees the request with job details', row?.applicationStatus === 'APPROVED' && row?.incomeEntryId?.sideHustleId?.title === target.title && row?.paidForSameJob === 0, JSON.stringify(row)) }
+r = await admin.req('GET', '/admin/overview'); check('overview counts pending payouts', r.data?.properties?.pendingPayouts >= 1)
+r = await admin.req('POST', `/payments/${payout1._id}/reject`, { reason: 'short' }); check('payout rejection needs a reason (400)', r.status === 400)
+r = await admin.req('POST', `/payments/${payout1._id}/reject`, { reason: 'Please log the correct number of hours.' }); check('admin rejects payout', r.status === 200, JSON.stringify(r.data))
+r = await user.req('GET', '/income/entries')
+{ const e = r.data?.properties?.entries?.find((x) => x._id === entryId); check('user sees rejection and reason', e?.payoutStatus === 'REJECTED' && /hours/.test(e?.payoutRejectionReason), JSON.stringify(e)) }
+r = await user.req('PUT', `/income/entries/${entryId}`, { hoursSpent: 9 }); check('entry unlocked after rejection', r.status === 200)
+r = await user.req('POST', '/payments/request', { incomeEntryId: entryId, method: 'GCASH' }); check('can request again after rejection', r.status === 201, JSON.stringify(r.data))
+const payout2 = r.data?.properties?.transaction
+r = await admin.req('POST', `/payments/${payout2._id}/approve`, {}); check('approval requires confirming the job (400)', r.status === 400)
+{
+  const both = await Promise.all([1, 2].map(() => admin.req('POST', `/payments/${payout2._id}/approve`, { jobConfirmed: true })))
+  check('double approval pays exactly once (GCASH without keys is simulated)', both.filter((x) => x.status === 200).length === 1 && both.filter((x) => x.status === 409).length === 1, both.map((x) => x.status).join())
+  check('approved payout is paid', both.find((x) => x.status === 200)?.data?.properties?.transaction?.status === 'SUCCESS')
+}
+r = await admin.req('POST', `/payments/${payout2._id}/reject`, { reason: 'Too late to reject this now.' }); check('paid payout cannot be rejected (409)', r.status === 409)
+r = await user.req('POST', '/payments/request', { incomeEntryId: entryId, method: 'GCASH' }); check('paid entry cannot be paid twice (409)', r.status === 409)
+r = await user.req('GET', '/income/entries'); check('entry shows PAID', r.data?.properties?.entries?.find((x) => x._id === entryId)?.payoutStatus === 'PAID')
+r = await user.req('GET', '/applications/me'); check('approving the payout completes the application', r.data?.properties?.applications?.find((x) => x._id === appId)?.applicationStatus === 'COMPLETED')
 r = await user.req('GET', '/payments/me')
 check('transactions list', r.data?.properties?.transactions?.length >= 2)
 const txId = r.data.properties.transactions[0]._id
@@ -319,6 +348,34 @@ r = await send(new Client('anon'), 'POST', '/applications', formWith({ sideHustl
 check('anonymous upload refused before the files are read (401)', r.status === 401)
 r = await U2.req('POST', '/applications', { sideHustleId: L2._id, coverNote: 'plain JSON still works' })
 check('plain JSON application (no files) still works', r.status === 201)
+
+// --- PWD verification ---
+{
+  const P = await newUser('pwd'), X = await newUser('other')
+  const prof = (g) => P.req('PUT', '/profile/me', { skills: ['writing'], interests: ['writing'], userGroup: g })
+  const proof = (files) => send(P, 'POST', '/profile/pwd-verification', formWith({}, files))
+  const card = { name: 'pwd-card.png', bytes: bytesPng(), type: 'image/png' }
+  let q = await prof('PWD'); check('PWD without proof is refused (400)', q.status === 400)
+  q = await proof([]); check('empty proof refused (400)', q.status === 400)
+  q = await proof([{ name: 'card.png', bytes: Buffer.from('<html>not an image</html>') }]); check('fake image refused (400)', q.status === 400)
+  q = await proof([card]); check('proof submitted -> PENDING', q.status === 201 && q.data.properties.pwdVerification.status === 'PENDING', JSON.stringify(q.data))
+  const v = q.data.properties.pwdVerification
+  q = await proof([card]); check('second submission while pending -> 409', q.status === 409)
+  q = await prof('PWD'); check('PWD can be saved once proof is submitted', q.status === 200)
+  const get = async (c, id) => (await fetch(BASE + '/profile/pwd-verification/files/' + id, { headers: { Cookie: c.cookie } })).status
+  check('owner and admin can open the proof, others cannot', await get(P, v.files[0].fileId) === 200 && await get(admin, v.files[0].fileId) === 200 && await get(X, v.files[0].fileId) === 404)
+  q = await P.req('PATCH', `/profile/pwd-verification/${v._id}/decision`, { decision: 'APPROVED' }); check('user cannot approve own proof (403)', q.status === 403)
+  q = await admin.req('GET', '/profile/pwd-verification/admin/all?status=PENDING'); check('admin sees it pending', q.data?.properties?.verifications?.some((x) => x._id === v._id))
+  q = await admin.req('PATCH', `/profile/pwd-verification/${v._id}/decision`, { decision: 'REJECTED', reason: 'no' }); check('PWD rejection needs a reason (400)', q.status === 400)
+  q = await admin.req('PATCH', `/profile/pwd-verification/${v._id}/decision`, { decision: 'REJECTED', reason: 'The photo is too blurry to read.' }); check('admin rejects proof', q.status === 200)
+  q = await P.req('GET', '/profile/me'); check('rejection resets the group and shows the reason', q.data.properties.profile.userGroup === 'OTHER' && /blurry/.test(q.data.properties.pwdVerification.rejectionReason))
+  q = await prof('PWD'); check('rejected user cannot pick PWD without new proof (400)', q.status === 400)
+  q = await proof([card]); check('rejected user can resubmit', q.status === 201, JSON.stringify(q.data))
+  check('old rejected file is removed', await get(admin, v.files[0].fileId) === 404)
+  const both = await Promise.all([1, 2].map(() => admin.req('PATCH', `/profile/pwd-verification/${v._id}/decision`, { decision: 'APPROVED' })))
+  check('approval is decided exactly once', both.filter((x) => x.status === 200).length === 1 && both.filter((x) => x.status === 409).length === 1)
+  q = await prof('PWD'); check('approved user keeps PWD', q.status === 200 && q.data.properties.profile.userGroup === 'PWD')
+}
 
 // --- downloads + access control ---
 const f0 = app1.attachments[0]

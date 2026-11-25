@@ -4,6 +4,7 @@ import IncomeEntry from '../income/models/income-entry.model.js'
 import Transaction from '../transactions/models/transaction.model.js'
 import Rating from '../ratings/models/rating.model.js'
 import Application from '../applications/models/application.model.js'
+import PwdVerification from '../profile/models/pwd-verification.model.js'
 import { logActivity } from '../activitylogs/activitylogs.controller.js'
 import { createNotification } from '../notifications/notifications.controller.js'
 export const listUsers=async(_req,res)=>{try{return res.status(200).json({properties:{users:await User.find().populate('roleId','name').select('-password').sort({createdAt:-1})}})}catch(error){return res.status(500).json({message:error.message})}}
@@ -19,8 +20,8 @@ export const setUserActiveStatus=async(req,res)=>{
 }
 export const getPlatformOverview=async(_req,res)=>{
     try{
-        const[uc,alc,tia,txc,ra,pa,ta]=await Promise.all([User.countDocuments(),SideHustle.countDocuments({status:'ACTIVE'}),IncomeEntry.aggregate([{$match:{status:'COMPLETED'}},{$group:{_id:null,total:{$sum:'$amountEarned'}}}]),Transaction.countDocuments({status:'SUCCESS'}),Rating.aggregate([{$group:{_id:null,sum:{$sum:'$stars'},count:{$sum:1}}}]),Application.countDocuments({applicationStatus:'PENDING'}),Application.countDocuments()])
-        return res.status(200).json({properties:{userCount:uc,activeListingCount:alc,totalIncomeFacilitated:tia[0]?.total||0,successfulTransactionCount:txc,averageSatisfactionStars:ra[0]?.count?Math.round((ra[0].sum/ra[0].count)*10)/10:0,totalRatings:ra[0]?.count||0,pendingApplications:pa,totalApplications:ta}})
+        const[uc,alc,tia,txc,ra,pa,ta,pp,pv]=await Promise.all([User.countDocuments(),SideHustle.countDocuments({status:'ACTIVE'}),IncomeEntry.aggregate([{$match:{status:'COMPLETED'}},{$group:{_id:null,total:{$sum:'$amountEarned'}}}]),Transaction.countDocuments({status:'SUCCESS'}),Rating.aggregate([{$group:{_id:null,sum:{$sum:'$stars'},count:{$sum:1}}}]),Application.countDocuments({applicationStatus:'PENDING'}),Application.countDocuments(),Transaction.countDocuments({status:'REQUESTED'}),PwdVerification.countDocuments({status:'PENDING'})])
+        return res.status(200).json({properties:{userCount:uc,activeListingCount:alc,totalIncomeFacilitated:tia[0]?.total||0,successfulTransactionCount:txc,averageSatisfactionStars:ra[0]?.count?Math.round((ra[0].sum/ra[0].count)*10)/10:0,totalRatings:ra[0]?.count||0,pendingApplications:pa,pendingPayouts:pp,pendingPwdVerifications:pv,totalApplications:ta}})
     }catch(error){return res.status(500).json({message:error.message})}
 }
 

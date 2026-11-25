@@ -12,7 +12,7 @@ import { filledCountMap } from './filledCounts.js'
 
 
 // RFC 6266/5987: ASCII fallback for old clients + the real UTF-8 name in filename*. (Raw accents in a quoted filename are not portable.)
-const attachmentHeader = (name) => {
+export const attachmentHeader = (name) => {
     const ascii = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
     const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
     return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`

@@ -32,7 +32,7 @@ export const createPaypalOrder = async ({ amount, description, referenceNumber }
     const r = await axios.post(`${paypalBase()}/v2/checkout/orders`, {
         intent: 'CAPTURE',
         purchase_units: [{ reference_id: referenceNumber, description, amount: { currency_code: 'PHP', value: amount.toFixed(2) } }],
-        application_context: { return_url: `${publicServerUrl()}/api/v1/payments/paypal/capture`, cancel_url: `${publicClientUrl()}/app/payments/paypal/cancel` }
+        application_context: { return_url: `${publicServerUrl()}/api/v1/payments/paypal/capture`, cancel_url: `${publicClientUrl()}/admin/payouts?paypal=cancel` }
     }, { headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } })
     const o = r.data
     return { provider: 'PAYPAL', method: 'PAYPAL', checkoutUrl: o.links.find((l) => l.rel === 'approve')?.href, referenceId: o.id, status: 'PENDING', rawResponse: o }

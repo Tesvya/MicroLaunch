@@ -38,11 +38,23 @@ try {
   let r = await req('POST', '/auth/register', { name: 'GW Tester', email, password: 'Password123', confirmPassword: 'Password123' })
   await req('POST', '/auth/verify-email', { token: new URL(r.data.properties.devVerificationUrl).searchParams.get('token') })
   await req('POST', '/auth/login', { email, password: 'Password123' })
-  const initiate = (method, amount = 1500) => req('POST', '/payments/initiate', { amount, method })
+  // Payouts now need an approved job, a user request, and an admin approval (which starts the gateway payment)
+  const userCookie = cookie; cookie = ''
+  await req('POST', '/auth/login', { email: 'admin@microlaunch.local', password: 'Admin12345!' }); const adminCookie = cookie
+  const as = async (c, ...args) => { const prev = cookie; cookie = c; const out = await req(...args); cookie = prev; return out }
+  cookie = userCookie
+  const listing = (await as(adminCookie, 'POST', '/side-hustles', { title: 'GW Listing', description: 'gateway test', requiredSkills: ['x'], category: ['qa'], workMode: 'REMOTE', payType: 'FIXED', payAmountMin: 1, payAmountMax: 2, openings: 3 })).data.properties.sideHustle
+  const gwApp = (await req('POST', '/applications', { sideHustleId: listing._id })).data.properties.application
+  await as(adminCookie, 'PATCH', `/applications/${gwApp._id}/status`, { applicationStatus: 'APPROVED' })
+  const initiate = async (method, amount = 1500) => {
+    const entry = (await req('POST', '/income/entries', { title: 'GW job', sideHustleId: listing._id, amountEarned: amount, status: 'COMPLETED' })).data.properties.entry
+    const q = await req('POST', '/payments/request', { incomeEntryId: entry._id, method })
+    return as(adminCookie, 'POST', `/payments/${q.data.properties.transaction._id}/approve`, { jobConfirmed: true })
+  }
 
   console.log('PayMongo (GCash / Maya)')
   r = await initiate('GCASH'); const g1 = r.data?.properties?.transaction; const url1 = r.data?.properties?.checkoutUrl
-  check('GCash payout creates a PENDING PayMongo transaction', r.status === 201 && g1?.provider === 'PAYMONGO' && g1?.status === 'PENDING', JSON.stringify(r.data))
+  check('GCash payout creates a PENDING PayMongo transaction', r.status === 200 && g1?.provider === 'PAYMONGO' && g1?.status === 'PENDING', JSON.stringify(r.data))
   check('returns the provider checkout URL for redirect', url1 === `https://pm.test/checkout/${g1?.gatewayReferenceId}`, url1)
   check('amount sent in centavos (PHP 1500 -> 150000)', state.links[g1.gatewayReferenceId]?.amount === 150000)
   r = await req('POST', `/payments/${g1._id}/verify`)
@@ -74,17 +86,17 @@ try {
 
   console.log('PayPal')
   r = await initiate('PAYPAL', 1200); const p1 = r.data.properties.transaction
-  check('PayPal payout creates a PENDING order + approval URL', r.status === 201 && p1.provider === 'PAYPAL' && p1.status === 'PENDING' && r.data.properties.checkoutUrl?.startsWith('https://pp.test/approve/'))
+  check('PayPal payout creates a PENDING order + approval URL', r.status === 200 && p1.provider === 'PAYPAL' && p1.status === 'PENDING' && r.data.properties.checkoutUrl?.startsWith('https://pp.test/approve/'))
   check('PayPal return_url points at OUR capture endpoint (the bug I fixed)', state.orders[p1.gatewayReferenceId].ctx.return_url === `http://localhost:${APP}/api/v1/payments/paypal/capture`, state.orders[p1.gatewayReferenceId].ctx.return_url)
-  check('PayPal cancel_url points at the site cancel page', state.orders[p1.gatewayReferenceId].ctx.cancel_url === 'http://localhost:5173/app/payments/paypal/cancel')
+  check('PayPal cancel_url points at the site cancel page', state.orders[p1.gatewayReferenceId].ctx.cancel_url === 'http://localhost:5173/admin/payouts?paypal=cancel')
   state.orders[p1.gatewayReferenceId].status = 'APPROVED'
   r = await req('GET', `/payments/paypal/capture?token=${p1.gatewayReferenceId}&PayerID=X`)
-  check('capture endpoint redirects the buyer back to the success page', r.status === 302 && r.headers.get('location') === `http://localhost:5173/app/payments/paypal/success?ref=${p1.referenceNumber}`, r.headers.get('location'))
+  check('capture endpoint redirects the buyer back to the success page', r.status === 302 && r.headers.get('location') === `http://localhost:5173/admin/payouts?paypal=success&ref=${p1.referenceNumber}`, r.headers.get('location'))
   check('...and the order was captured exactly once -> SUCCESS', state.orders[p1.gatewayReferenceId].captures === 1 && (await mongoose.connection.collection('transactions').findOne({ referenceNumber: p1.referenceNumber })).status === 'SUCCESS')
   await req('GET', `/payments/paypal/capture?token=${p1.gatewayReferenceId}`)
   check('replaying the capture URL does not double-capture', state.orders[p1.gatewayReferenceId].captures === 1)
   r = await req('GET', '/payments/paypal/capture?token=NOPE')
-  check('unknown order token redirects to the cancel page', r.status === 302 && r.headers.get('location')?.endsWith('/app/payments/paypal/cancel'))
+  check('unknown order token redirects to the cancel page', r.status === 302 && r.headers.get('location')?.endsWith('/admin/payouts?paypal=cancel'))
   r = await initiate('PAYPAL', 400); const p2 = r.data.properties.transaction
   state.orders[p2.gatewayReferenceId].status = 'APPROVED'
   r = await req('POST', `/payments/${p2._id}/verify`)

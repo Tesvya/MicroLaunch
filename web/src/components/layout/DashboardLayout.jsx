@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LuLayoutDashboard, LuSparkles, LuWallet, LuStar, LuUser, LuLogOut, LuUsers, LuBriefcase, LuGauge, LuClipboardList, LuBell, LuFileText, LuActivity, LuMenu, LuX, LuReceipt, LuHeart } from 'react-icons/lu'
+import { LuLayoutDashboard, LuSparkles, LuWallet, LuStar, LuUser, LuLogOut, LuUsers, LuBriefcase, LuGauge, LuClipboardList, LuBell, LuFileText, LuActivity, LuMenu, LuX, LuReceipt, LuHeart, LuBadgeCheck } from 'react-icons/lu'
 import { FAVORITE } from '../../shared/labels'
 import { useAuth } from '../../hooks/useAuth.hook'
 import { useAuthStore } from '../../store/auth/auth.store'
@@ -21,6 +21,8 @@ const ADMIN_NAV = [
     { to: '/admin/dashboard', label: 'Overview', icon: LuGauge },
     { to: '/admin/listings', label: 'Side-Hustle Listings', icon: LuBriefcase },
     { to: '/admin/applications', label: 'Applications', icon: LuClipboardList },
+    { to: '/admin/payouts', label: 'Payouts', icon: LuReceipt },
+    { to: '/admin/pwd-verifications', label: 'PWD Verification', icon: LuBadgeCheck },
     { to: '/admin/users', label: 'Manage Users', icon: LuUsers },
     { to: '/admin/reports', label: 'Reports', icon: LuFileText },
     { to: '/admin/activity-logs', label: 'Activity Logs', icon: LuActivity }

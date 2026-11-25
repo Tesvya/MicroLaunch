@@ -88,6 +88,7 @@ const AddEntryForm = ({ onAdd, onClose, approvedApplications }) => {
         </div>
       )}
 
+      {selectedApp ? null : <p className="text-xs text-ink-muted">Manual entries are for your own tracking. Payouts can only be requested for approved jobs.</p>}
       <Field label={selectedApp ? 'Title (pre-filled from listing)' : 'What did you work on?'}>
         <Input
           value={form.title}
@@ -197,6 +198,14 @@ const RatingForm = ({ entry, onClose, onSubmitted }) => {
   )
 }
 
+const PAYOUT_BADGE = {
+  REQUESTED: { tone: 'amber', label: 'Payout awaiting approval' },
+  PROCESSING: { tone: 'amber', label: 'Payout approved' },
+  PAID: { tone: 'success', label: 'Paid' },
+  REJECTED: { tone: 'danger', label: 'Payout not approved' }
+}
+const isLocked = (entry) => ['REQUESTED', 'PROCESSING', 'PAID'].includes(entry.payoutStatus)
+
 const PAY_METHODS = [
   { value: 'GCASH', label: 'GCash', hint: 'via PayMongo' },
   { value: 'MAYA', label: 'Maya', hint: 'via PayMongo' },
@@ -208,7 +217,8 @@ const PayoutForm = ({ entry, onPay, onClose, isPaying }) => {
   const [method, setMethod] = useState('MOCK_GCASH')
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-ink-900">Payout for: <span className="text-ink-muted">{entry.title}</span> &middot; <span className="text-success-600">{peso(entry.amountEarned)}</span></p>
+      <p className="text-sm font-medium text-ink-900">Request payout for: <span className="text-ink-muted">{entry.title}</span> &middot; <span className="text-success-600">{peso(entry.amountEarned)}</span></p>
+      <p className="text-xs text-ink-muted">An admin will confirm the job was completed before this is paid. You can&rsquo;t edit the entry while it is being reviewed.</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {PAY_METHODS.map((m) => (
           <button key={m.value} type="button" onClick={() => setMethod(m.value)}
@@ -219,7 +229,7 @@ const PayoutForm = ({ entry, onPay, onClose, isPaying }) => {
         ))}
       </div>
       <div className="flex gap-2">
-        <Button size="sm" variant="accent" isLoading={isPaying} onClick={() => onPay(entry, method)}>Confirm payout</Button>
+        <Button size="sm" variant="accent" isLoading={isPaying} onClick={() => onPay(entry, method)}>Request payout</Button>
         <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
       </div>
     </div>
@@ -228,7 +238,7 @@ const PayoutForm = ({ entry, onPay, onClose, isPaying }) => {
 
 const Income = () => {
   const { summary, entries, fetchSummary, fetchEntries, addEntry, removeEntry, editEntry } = useIncomeStore()
-  const { pay } = useTransactionsStore()
+  const { requestPayout } = useTransactionsStore()
   const { applications, fetchMyApplications } = useApplicationsStore()
   const [showForm, setShowForm] = useState(false)
   const [editingEntry, setEditingEntry] = useState(null)
@@ -242,11 +252,12 @@ const Income = () => {
     Promise.all([fetchSummary(), fetchEntries(), fetchMyApplications()]).finally(() => setIsLoading(false))
   }, [])
 
-  const approvedApplications = applications.filter((a) => a.applicationStatus === 'APPROVED')
+  const approvedApplications = applications.filter((a) => ['APPROVED', 'COMPLETED'].includes(a.applicationStatus) && a.sideHustleId)
   const refreshSummary = () => fetchSummary().catch(() => {})
 
   const handleMarkComplete = async (entry) => {
-    await editEntry(entry._id, { status: 'COMPLETED' }); refreshSummary(); toast.success('Marked as completed')
+    try { await editEntry(entry._id, { status: 'COMPLETED' }); refreshSummary(); toast.success('Marked as completed') }
+    catch (error) { toast.error(error?.response?.data?.message || 'Could not update entry') }
   }
 
   const handleEdit = async (id, data) => {
@@ -256,12 +267,11 @@ const Income = () => {
   const handlePayout = async (entry, method) => {
     setPayingId(entry._id)
     try {
-      const r = await pay({ incomeEntryId: entry._id, amount: entry.amountEarned, method })
-      const url = r.data?.properties?.checkoutUrl
-      if (url) { window.open(url, '_blank'); toast.success('Complete your payment in the new tab, then check its status under Transactions.') }
-      else toast.success(`Payout of ${peso(entry.amountEarned)} recorded`)
-      setPayoutEntry(null)
-    } catch (error) { toast.error(error?.response?.data?.message || 'Payment failed') }
+      await requestPayout({ incomeEntryId: entry._id, method })
+      toast.success(`Payout of ${peso(entry.amountEarned)} requested. An admin will review it.`)
+      setPayoutEntry(null); setEditingEntry(null)
+      await fetchEntries()
+    } catch (error) { toast.error(error?.response?.data?.message || 'Could not request the payout') }
     finally { setPayingId(null) }
   }
 
@@ -292,7 +302,7 @@ const Income = () => {
       {approvedApplications.length > 0 && !showForm ? (
         <div className="rounded-xl border border-success-600/20 bg-success-100/30 px-4 py-3">
           <p className="text-sm font-medium text-success-600">
-            You have {approvedApplications.length} approved application{approvedApplications.length > 1 ? 's' : ''} ready to track.
+            You have {approvedApplications.length} approved job{approvedApplications.length > 1 ? 's' : ''} you can log income for.
           </p>
           <p className="mt-0.5 text-xs text-success-600/80">Click &ldquo;Add entry&rdquo; above and select from your approved opportunities.</p>
         </div>
@@ -353,18 +363,19 @@ const Income = () => {
                     <Badge tone={entry.status === 'COMPLETED' ? 'success' : entry.status === 'CANCELLED' ? 'danger' : 'amber'}>
                       {entry.status.replace('_', ' ')}
                     </Badge>
-                    <Button size="sm" variant="ghost" className="border border-ink-faint/30" onClick={() => { setEditingEntry(editingEntry?._id === entry._id ? null : entry); setRatingEntry(null) }}>
+                    {PAYOUT_BADGE[entry.payoutStatus] ? <Badge tone={PAYOUT_BADGE[entry.payoutStatus].tone}>{PAYOUT_BADGE[entry.payoutStatus].label}</Badge> : null}
+                    {isLocked(entry) ? null : <Button size="sm" variant="ghost" className="border border-ink-faint/30" onClick={() => { setEditingEntry(editingEntry?._id === entry._id ? null : entry); setRatingEntry(null) }}>
                       <LuPencil className="h-3.5 w-3.5" /> Edit
-                    </Button>
+                    </Button>}
                     {entry.status === 'IN_PROGRESS' ? (
                       <Button size="sm" variant="ghost" className="border border-ink-faint/30" onClick={() => handleMarkComplete(entry)}>
                         <LuCircleCheck className="h-3.5 w-3.5" /> Complete
                       </Button>
                     ) : entry.status === 'COMPLETED' ? (
                       <>
-                        <Button size="sm" variant="ghost" className="border border-ink-faint/30" onClick={() => { setPayoutEntry(payoutEntry?._id === entry._id ? null : entry); setEditingEntry(null); setRatingEntry(null) }}>
-                          <LuWallet className="h-3.5 w-3.5" /> Payout
-                        </Button>
+                        {entry.sideHustleId && !isLocked(entry) ? <Button size="sm" variant="ghost" className="border border-ink-faint/30" onClick={() => { setPayoutEntry(payoutEntry?._id === entry._id ? null : entry); setEditingEntry(null); setRatingEntry(null) }}>
+                          <LuWallet className="h-3.5 w-3.5" /> Request payout
+                        </Button> : null}
                         {!ratedIds.has(entry._id) ? (
                           <Button size="sm" variant="ghost" className="border border-amber-500/40 text-amber-500" onClick={() => { setRatingEntry(ratingEntry?._id === entry._id ? null : entry); setEditingEntry(null) }}>
                             <LuStar className="h-3.5 w-3.5" /> Rate
@@ -372,11 +383,12 @@ const Income = () => {
                         ) : <Badge tone="amber">Rated</Badge>}
                       </>
                     ) : null}
-                    <button onClick={async () => { await removeEntry(entry._id); refreshSummary() }} className="text-ink-faint hover:text-danger-600">
+                    {isLocked(entry) ? null : <button aria-label="Delete entry" onClick={async () => { try { await removeEntry(entry._id); refreshSummary() } catch (error) { toast.error(error?.response?.data?.message || 'Could not delete entry') } }} className="text-ink-faint hover:text-danger-600">
                       <LuTrash2 className="h-4 w-4" />
-                    </button>
+                    </button>}
                   </div>
                 </div>
+                {entry.payoutStatus === 'REJECTED' && entry.payoutRejectionReason ? <p className="mt-2 text-sm text-danger-600">Payout not approved: {entry.payoutRejectionReason}</p> : null}
                 {editingEntry?._id === entry._id ? (
                   <div className="mt-3 rounded-xl border border-ink-faint/20 bg-canvas p-4">
                     <EditEntryForm entry={entry} onSave={handleEdit} onClose={() => setEditingEntry(null)} />

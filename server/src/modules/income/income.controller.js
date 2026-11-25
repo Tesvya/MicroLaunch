@@ -1,9 +1,24 @@
 import IncomeEntry from './models/income-entry.model.js'
+import Transaction from '../transactions/models/transaction.model.js'
 import UserProfile from '../profile/models/user-profile.model.js'
+const OPEN={$in:[null,'NONE','REJECTED']}
+const LOCKED='This entry has a payout request or has already been paid, so it can no longer be changed'
+// Payouts made before admin approval existed have a transaction but no payoutStatus on the entry
+const isLocked=async(id)=>Boolean(await Transaction.exists({incomeEntryId:id,status:{$in:['REQUESTED','PENDING','SUCCESS']}}))
+const notChanged=async(req,res)=>(await IncomeEntry.exists({_id:req.params.id,userId:req.user._id}))?res.status(409).json({message:LOCKED}):res.status(404).json({message:'Entry not found'})
 export const createIncomeEntry=async(req,res)=>{try{const p=req.validatedData.body;const e=await IncomeEntry.create({...p,userId:req.user._id,completedAt:p.status==='COMPLETED'?new Date():null});return res.status(201).json({message:'Entry added',properties:{entry:e}})}catch(error){return res.status(500).json({message:error.message})}}
-export const updateIncomeEntry=async(req,res)=>{try{const{id}=req.params;const p=req.validatedData.body;const u={...p,updatedAt:new Date()};if(p.status==='COMPLETED')u.completedAt=new Date();const e=await IncomeEntry.findOneAndUpdate({_id:id,userId:req.user._id},{$set:u},{new:true});if(!e)return res.status(404).json({message:'Entry not found'});return res.status(200).json({message:'Updated',properties:{entry:e}})}catch(error){return res.status(500).json({message:error.message})}}
-export const deleteIncomeEntry=async(req,res)=>{try{const e=await IncomeEntry.findOneAndDelete({_id:req.params.id,userId:req.user._id});if(!e)return res.status(404).json({message:'Not found'});return res.status(200).json({message:'Deleted'})}catch(error){return res.status(500).json({message:error.message})}}
-export const listMyIncomeEntries=async(req,res)=>{try{return res.status(200).json({properties:{entries:await IncomeEntry.find({userId:req.user._id}).sort({createdAt:-1})}})}catch(error){return res.status(500).json({message:error.message})}}
+export const updateIncomeEntry=async(req,res)=>{try{const{id}=req.params;if(await isLocked(id))return notChanged(req,res);const p=req.validatedData.body;const u={...p,updatedAt:new Date()};if(p.status==='COMPLETED')u.completedAt=new Date();const e=await IncomeEntry.findOneAndUpdate({_id:id,userId:req.user._id,payoutStatus:OPEN},{$set:u},{new:true});if(!e)return notChanged(req,res);return res.status(200).json({message:'Updated',properties:{entry:e}})}catch(error){return res.status(500).json({message:error.message})}}
+export const deleteIncomeEntry=async(req,res)=>{try{if(await isLocked(req.params.id))return notChanged(req,res);const e=await IncomeEntry.findOneAndDelete({_id:req.params.id,userId:req.user._id,payoutStatus:OPEN});if(!e)return notChanged(req,res);return res.status(200).json({message:'Deleted'})}catch(error){return res.status(500).json({message:error.message})}}
+const PAYOUT_OF={REQUESTED:'REQUESTED',PENDING:'PROCESSING',SUCCESS:'PAID',REJECTED:'REJECTED'}
+export const listMyIncomeEntries=async(req,res)=>{
+    try{
+        const entries=await IncomeEntry.find({userId:req.user._id}).sort({createdAt:-1}).lean()
+        const txs=await Transaction.find({userId:req.user._id,incomeEntryId:{$ne:null}}).select('incomeEntryId status rejectionReason').sort({createdAt:1}).lean()
+        const byEntry=new Map() // latest transaction per entry; a paid one always wins
+        for(const t of txs){const k=String(t.incomeEntryId);if(byEntry.get(k)?.status!=='SUCCESS')byEntry.set(k,t)}
+        const withPayout=entries.map((e)=>{const t=byEntry.get(String(e._id));return{...e,payoutStatus:PAYOUT_OF[t?.status]||e.payoutStatus||'NONE',payoutRejectionReason:t?.status==='REJECTED'?t.rejectionReason:''}})
+        return res.status(200).json({properties:{entries:withPayout}})
+    }catch(error){return res.status(500).json({message:error.message})}}
 export const getMyDashboardSummary=async(req,res)=>{
     try{
         const uid=req.user._id;const entries=await IncomeEntry.find({userId:uid}).lean();const profile=await UserProfile.findOne({userId:uid}).lean()

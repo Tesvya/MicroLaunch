@@ -1,5 +1,6 @@
 import SideHustle from '../sidehustles/models/side-hustle.model.js'
 import UserProfile from '../profile/models/user-profile.model.js'
+import PwdVerification from '../profile/models/pwd-verification.model.js'
 import RecommendationLog from './models/recommendation-log.model.js'
 import { rankSideHustlesHybrid } from '../ml/hybridEngine.js'
 import { getMetrics } from '../ml/modelLoader.js'
@@ -8,6 +9,8 @@ export const getMyRecommendations = async (req, res) => {
     try {
         const profile = await UserProfile.findOne({ userId: req.user._id }).lean()
         if (!profile) return res.status(400).json({ message: 'Complete your profile first to get recommendations' })
+        // An unverified PWD claim must not influence matching
+        if (profile.userGroup === 'PWD' && !(await PwdVerification.exists({ userId: req.user._id, status: 'APPROVED' }))) profile.userGroup = 'OTHER'
         const listings = await withFilledCounts(await SideHustle.find({ status: 'ACTIVE' }).lean())
         const ranked = rankSideHustlesHybrid(profile, listings, Number(req.query.minScore)||0)
         const top = ranked.slice(0, Number(req.query.limit)||20)

@@ -1,12 +1,15 @@
 import UserProfile from './models/user-profile.model.js'
+import PwdVerification from './models/pwd-verification.model.js'
 import User from '../auth/models/user.model.js'
 export const getMyProfile = async (req, res) => {
-    try { const profile = await UserProfile.findOne({ userId: req.user._id }); return res.status(200).json({ properties: { profile: profile || null } }) }
+    try { const [profile, pwdVerification] = await Promise.all([UserProfile.findOne({ userId: req.user._id }), PwdVerification.findOne({ userId: req.user._id })]); return res.status(200).json({ properties: { profile: profile || null, pwdVerification: pwdVerification || null } }) }
     catch (error) { return res.status(500).json({ message: error.message }) }
 }
 export const upsertMyProfile = async (req, res) => {
     try {
         const payload = req.validatedData.body
+        // PWD needs proof on file. It only affects matching once an admin approves it (see recommendations.controller).
+        if (payload.userGroup === 'PWD' && !(await PwdVerification.exists({ userId: req.user._id, status: { $in: ['PENDING', 'APPROVED'] } }))) return res.status(400).json({ message: 'Please submit your PWD card or supporting documents before selecting PWD.' })
         const normalized = { ...payload, skills: payload.skills?.map((s)=>s.trim().toLowerCase()).filter(Boolean), interests: payload.interests?.map((s)=>s.trim().toLowerCase()).filter(Boolean), updatedAt: new Date() }
         const profile = await UserProfile.findOneAndUpdate({ userId: req.user._id }, { $set: normalized, $setOnInsert: { userId: req.user._id } }, { new: true, upsert: true })
         await User.updateOne({ _id: req.user._id }, { $set: { hasCompletedProfile: true, updatedAt: new Date() } })

@@ -6,12 +6,12 @@ import { downloadAttachment } from '../../services/user/applications.service'
 const prettySize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 
 /** Lists attached files; clicking one downloads it (the server only allows the applicant and admins). */
-export const AttachmentList = ({ attachments = [], emptyText = 'No files attached' }) => {
+export const AttachmentList = ({ attachments = [], emptyText = 'No files attached', download: fetchFile = downloadAttachment }) => {
   const [busyId, setBusyId] = useState(null)
   const download = async (f) => {
     setBusyId(f.fileId)
     try {
-      const r = await downloadAttachment(f.fileId)
+      const r = await fetchFile(f.fileId)
       const url = URL.createObjectURL(r.data)
       const a = document.createElement('a'); a.href = url; a.download = f.originalName
       document.body.appendChild(a); a.click(); a.remove()

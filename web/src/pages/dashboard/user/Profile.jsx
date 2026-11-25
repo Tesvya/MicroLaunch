@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { LuPlus, LuX } from 'react-icons/lu'
 import { useProfileStore } from '../../../store/user/profile.store'
+import { PwdProof } from '../../../components/dashboard/PwdProof'
 import { Card } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
 import { Field, Input, Textarea, Select } from '../../../components/ui/Input'
@@ -18,16 +19,22 @@ const TagInput = ({ value = [], onChange, placeholder }) => {
   )
 }
 const Profile = () => {
-  const { profile, fetchProfile, saveProfile } = useProfileStore()
+  const { pwdVerification, fetchProfile, saveProfile, submitProof } = useProfileStore()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const { register, control, handleSubmit, reset, watch, setValue } = useForm({ defaultValues: { bio:'',skills:[],interests:[],qualifications:'',experienceLevel:'NONE',weeklyAvailabilityHours:0,availableDays:[],preferredWorkMode:'ANY',userGroup:'OTHER',monthlyIncomeGoal:0,savingsGoal:0,location:'' } })
+  const [proofFiles, setProofFiles] = useState([])
+  const isPwd = watch('userGroup') === 'PWD'
   const selectedDays = watch('availableDays')
   useEffect(() => { fetchProfile().then((r) => { const e = r.data?.properties?.profile; if (e) reset(e) }).finally(() => setIsLoading(false)) }, [])
   const toggleDay = (day) => setValue('availableDays', selectedDays.includes(day) ? selectedDays.filter((d) => d !== day) : [...selectedDays, day])
   const onSubmit = async (data) => {
+    const needsProof = data.userGroup === 'PWD' && (!pwdVerification || pwdVerification.status === 'REJECTED')
+    if (needsProof && proofFiles.length === 0) { toast.error('Attach your PWD card or supporting documents first'); return }
     setIsSaving(true)
-    try { await saveProfile({ ...data, weeklyAvailabilityHours: Number(data.weeklyAvailabilityHours)||0, monthlyIncomeGoal: Number(data.monthlyIncomeGoal)||0, savingsGoal: Number(data.savingsGoal)||0 }); toast.success('Profile saved') }
+    try {
+      if (needsProof) { await submitProof(proofFiles); setProofFiles([]) }
+      await saveProfile({ ...data, weeklyAvailabilityHours: Number(data.weeklyAvailabilityHours)||0, monthlyIncomeGoal: Number(data.monthlyIncomeGoal)||0, savingsGoal: Number(data.savingsGoal)||0 }); toast.success(needsProof ? 'Profile saved. Your PWD proof was sent for review.' : 'Profile saved') }
     catch (e) { toast.error(e?.response?.data?.message || 'Could not save profile') }
     finally { setIsSaving(false) }
   }
@@ -41,6 +48,7 @@ const Profile = () => {
           <Field label="Short bio"><Textarea placeholder="Tell us a bit about yourself" {...register('bio')} /></Field>
           <Field label="Qualifications"><Input placeholder="e.g. BS Information Technology" {...register('qualifications')} /></Field>
           <Field label="I am currently a..."><Select {...register('userGroup')}><option value="STUDENT">Student</option><option value="FREELANCER">Freelancer</option><option value="UNEMPLOYED">Unemployed / Job seeker</option><option value="PART_TIME_WORKER">Part-time worker</option><option value="SENIOR_CITIZEN">Senior citizen</option><option value="PWD">Person with Disability (PWD)</option><option value="OTHER">Other</option></Select></Field>
+          {isPwd ? <PwdProof verification={pwdVerification} files={proofFiles} onFiles={setProofFiles} /> : null}
           <Field label="Location"><Input placeholder="e.g. Cebu City" {...register('location')} /></Field>
         </Card>
         <Card className="space-y-4">

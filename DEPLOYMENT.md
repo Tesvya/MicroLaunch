@@ -121,7 +121,7 @@ Register with a real address and confirm the email arrives **before** exhibit da
 **PayMongo (GCash + Maya)**: add `PAYMONGO_SECRET_KEY` (a `sk_test_...` key). For automatic confirmation, create a webhook in
 the PayMongo dashboard -> Developers -> Webhooks: URL `https://YOUR-SITE/api/v1/payments/paymongo/webhook`, event
 `link.payment.paid`; put its signing secret in `PAYMONGO_WEBHOOK_SECRET`.
-**The webhook is optional**: users can always press **Check status** on the Transactions page, which asks PayMongo directly.
+**The webhook is optional**: admins can always press **Check status** on the Payouts page (and users on Transactions), which asks PayMongo directly.
 
 **PayPal**: add `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from a *Sandbox* app (`PAYPAL_MODE=sandbox`).
 
