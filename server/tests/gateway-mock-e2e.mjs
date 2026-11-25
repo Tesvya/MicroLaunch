@@ -7,6 +7,7 @@ import { spawn } from 'child_process'
 import express from 'express'
 import mongoose from 'mongoose'
 
+if (!/127.0.0.1|localhost/.test(process.env.DATABASE_URL || '')) { console.error('Refusing to run: DATABASE_URL is not local. Use npm run test:integration'); process.exit(1) }
 const MOCK = 4010, APP = 4011, SECRET = 'whsec_testsecret'
 const RUN = Date.now().toString(36) // unique per run, like real provider IDs, so reruns never collide with old rows
 const state = { links: {}, orders: {}, seen: [], n: 0 }

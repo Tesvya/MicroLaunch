@@ -2,7 +2,9 @@ import express from 'express'
 import { requestPayout,listPayouts,approvePayout,rejectPayout } from './payouts.controller.js'
 import { capturePaypal,paymongoWebhook,listMyTransactions,verifyPayment } from './payments.controller.js'
 import { guard } from '../../shared/middlewares/guard.js'
+import { objectIdParam } from '../../shared/middlewares/objectIdParam.js'
 const r=express.Router()
+r.param('id', objectIdParam)
 r.post('/request',guard(['USER']),requestPayout)
 r.get('/admin/all',guard(['ADMIN']),listPayouts)
 r.post('/:id/approve',guard(['ADMIN']),approvePayout)

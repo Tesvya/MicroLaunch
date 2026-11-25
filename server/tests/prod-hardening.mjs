@@ -3,6 +3,7 @@ import '../src/configs/load-env.js'
 import { spawn, spawnSync } from 'child_process'
 import { runSmoke } from './deploy-smoke.mjs'
 
+if (!/127.0.0.1|localhost/.test(process.env.DATABASE_URL || '')) { console.error('Refusing to run: DATABASE_URL is not local. Use npm run test:integration'); process.exit(1) }
 let pass = 0, fail = 0
 const check = (l, c, x = '') => { c ? pass++ : fail++; console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l} ${c ? '' : x}`) }
 const STRONG = 'k9Qv2LrT8xZpM4nB7cYwE1sHdJfU6aGo3VtXiRb5'

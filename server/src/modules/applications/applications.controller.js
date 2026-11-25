@@ -8,6 +8,7 @@ import { logActivity } from '../activitylogs/activitylogs.controller.js'
 import { sendMail, decisionEmail } from '../../shared/utils/mailer.js'
 import { publicClientUrl } from '../../shared/utils/urls.js'
 import { detectFileType, cleanFileName } from './fileTypes.js'
+import { withListingLock } from './listingLock.js'
 import { filledCountMap } from './filledCounts.js'
 
 
@@ -129,17 +130,25 @@ export const updateApplicationStatus = async (req, res) => {
         if (!ALLOWED[app.applicationStatus]?.includes(applicationStatus)) return res.status(409).json({ message: `An application that is ${app.applicationStatus.toLowerCase()} cannot be changed to ${applicationStatus.toLowerCase()}.` })
 
         const listing = app.sideHustleId
+        const previousStatus = app.applicationStatus
         let fillsLastOpening = false
-        if (applicationStatus === 'APPROVED' && listing.openings != null) {
-            const taken = await Application.countDocuments({ sideHustleId: listing._id, applicationStatus: { $in: ['APPROVED', 'COMPLETED'] } })
-            if (taken >= listing.openings) return res.status(409).json({ message: `All ${listing.openings} opening(s) for this side-hustle are already filled. Increase the number of openings on the listing first.` })
-            fillsLastOpening = taken + 1 >= listing.openings
+        // Returns an error message, or '' once saved
+        const applyDecision = async () => {
+            if (applicationStatus === 'APPROVED' && listing.openings != null) {
+                const taken = await Application.countDocuments({ sideHustleId: listing._id, applicationStatus: { $in: ['APPROVED', 'COMPLETED'] } })
+                if (taken >= listing.openings) return `All ${listing.openings} opening(s) for this side-hustle are already filled. Increase the number of openings on the listing first.`
+                fillsLastOpening = taken + 1 >= listing.openings
+            }
+            app.applicationStatus = applicationStatus
+            if (applicationStatus !== 'COMPLETED') app.decisionMessage = (decisionMessage || '').trim()
+            app.decidedAt = new Date(); app.decidedBy = req.user._id; app.updatedAt = new Date()
+            // Only if nobody (another admin, or the applicant cancelling) changed it in the meantime
+            const saved = await Application.updateOne({ _id: app._id, applicationStatus: previousStatus }, { $set: { applicationStatus, decisionMessage: app.decisionMessage, decidedAt: app.decidedAt, decidedBy: app.decidedBy, updatedAt: app.updatedAt } })
+            return saved.modifiedCount ? '' : 'This application was just changed by someone else. Refresh and try again.'
         }
-
-        app.applicationStatus = applicationStatus
-        if (applicationStatus !== 'COMPLETED') app.decisionMessage = (decisionMessage || '').trim()
-        app.decidedAt = new Date(); app.decidedBy = req.user._id; app.updatedAt = new Date()
-        await app.save()
+        const problem = applicationStatus === 'APPROVED' ? await withListingLock(listing._id, applyDecision) : await applyDecision()
+        if (problem === null) return res.status(409).json({ message: 'Another approval for this listing is in progress. Please try again.' })
+        if (problem) return res.status(409).json({ message: problem })
 
         if (fillsLastOpening) {
             await SideHustle.updateOne({ _id: listing._id }, { $set: { status: 'CLOSED', updatedAt: new Date() } })

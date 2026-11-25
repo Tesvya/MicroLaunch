@@ -9,6 +9,7 @@
     "seed:sidehustles": "node src/migrations/seed-sidehustles.js",
     "seed:all": "node src/migrations/seed-admin.js && node src/migrations/seed-sidehustles.js",
     "ml:train": "node src/modules/ml/train.js",
+    "test:integration": "node tests/run-integration.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "build": "npm run ml:train",
     "test:gateways": "node tests/gateway-mock-e2e.mjs",
@@ -34,6 +35,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "mongodb-memory-server-core": "^11.4.0",
     "nodemon": "^3.1.14"
   }
 }

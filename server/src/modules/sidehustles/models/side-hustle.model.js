@@ -12,6 +12,7 @@ const sideHustleSchema = new mongoose.Schema({
     openings: { type: Number, min: 1, default: null },
     status: { type: String, enum: ['ACTIVE','CLOSED','DRAFT'], default: 'ACTIVE' },
     suitableFor: { type: [String], enum: ['STUDENT','FREELANCER','UNEMPLOYED','PART_TIME_WORKER','SENIOR_CITIZEN','PWD','OTHER'], default: [] },
+    approvalLock: { type: new mongoose.Schema({ token: String, until: Date }, { _id: false }), default: undefined, select: false }, // see applications/listingLock.js
     postedByAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now }, updatedAt: { type: Date, default: null }
 })

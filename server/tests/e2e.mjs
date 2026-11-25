@@ -1,8 +1,9 @@
 import '../src/configs/load-env.js'
 import mongoose from 'mongoose'
+if (!process.env.E2E_BASE || !/127.0.0.1|localhost/.test(process.env.DATABASE_URL || '')) { console.error('Refusing to run: these tests create data. Use npm run test:integration'); process.exit(1) }
 await mongoose.connect(process.env.DATABASE_URL)
 const usersCol = mongoose.connection.collection('users')
-const BASE = 'http://localhost:4000/api/v1'
+const BASE = process.env.E2E_BASE
 let pass = 0, fail = 0
 const results = []
 
@@ -69,6 +70,8 @@ check('resend for unknown email: same generic 200 (no account enumeration)', r.s
   await usersCol.updateOne({ email: e2 }, { $set: { emailVerificationExpires: new Date(Date.now() - 1000) } })
   q = await c2.req('POST', '/auth/verify-email', { token: t1 })
   check('expired token rejected (400)', q.status === 400)
+  // Only an email that was really sent starts the cooldown, and none is sent here, so simulate one
+  await usersCol.updateOne({ email: e2 }, { $set: { emailVerificationSentAt: new Date() } })
   q = await c2.req('POST', '/auth/resend-verification', { email: e2 })
   check('resend inside 60s cooldown does NOT issue a new link', q.status === 200 && !q.data?.properties?.devVerificationUrl)
   await usersCol.updateOne({ email: e2 }, { $set: { emailVerificationSentAt: new Date(Date.now() - 120000) } })

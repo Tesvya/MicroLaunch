@@ -16,7 +16,7 @@ export const deleteSideHustle = async (req, res) => {
 }
 export const listSideHustlesAdmin = async (_req, res) => { try { return res.status(200).json({ properties: { sideHustles: await withFilledCounts(await SideHustle.find().sort({ createdAt: -1 }).lean()) } }) } catch (error) { return res.status(500).json({ message: error.message }) } }
 export const listActiveSideHustles = async (req, res) => {
-    try { const { category, search } = req.query; const filter = { status: 'ACTIVE' }; if (category) filter.category = String(category).toLowerCase(); if (search) filter.title = { $regex: String(search), $options: 'i' }; return res.status(200).json({ properties: { sideHustles: await withFilledCounts(await SideHustle.find(filter).sort({ createdAt: -1 }).lean()) } }) }
+    try { const { category, search } = req.query; const filter = { status: 'ACTIVE' }; if (category) filter.category = String(category).toLowerCase(); if (search) filter.title = { $regex: String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }; return res.status(200).json({ properties: { sideHustles: await withFilledCounts(await SideHustle.find(filter).sort({ createdAt: -1 }).lean()) } }) }
     catch (error) { return res.status(500).json({ message: error.message }) }
 }
 export const getSideHustleById = async (req, res) => { try { const s = await SideHustle.findById(req.params.id).lean(); if (!s) return res.status(404).json({ message: 'Not found' }); return res.status(200).json({ properties: { sideHustle: (await withFilledCounts([s]))[0] } }) } catch (error) { return res.status(500).json({ message: error.message }) } }

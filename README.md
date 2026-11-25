@@ -64,11 +64,9 @@ New accounts must verify their email before logging in (24-hour single-use link;
 - The seeded admin and any accounts that existed before this feature stay verified.
 
 ## Testing
-With MongoDB running and the server started (`npm run dev`), run in `server/`:
+Run in `server/` (no setup needed; build `web/` first so the hardening suite can serve it):
 ```bash
-npm run test:e2e        # full feature suite (95 checks)
-npm run test:gateways   # GCash/Maya/PayPal flows against a simulated provider (22 checks)
-npm run test:hardening  # production-mode safety guards, rate limiting, headers (34 checks)
+npm run test:integration   # all suites, on a throwaway in-memory MongoDB with mock email and payments
 npm run smoke -- https://your-site.onrender.com   # read-only checks for a live deployment (16 checks)
 ```
 
