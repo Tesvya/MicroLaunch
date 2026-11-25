@@ -47,7 +47,7 @@ const SideHustleDetail = () => {
   }, [id])
 
   const myApp = applications.find((a) => a.sideHustleId?._id === id)
-  const canApply = !myApp || myApp.applicationStatus === 'CANCELLED' // a cancelled application can be redone
+  const canApply = !myApp || ['CANCELLED', 'REJECTED'].includes(myApp.applicationStatus) // cancelled or rejected applicants can try again
   const isOpen = sideHustle?.status === 'ACTIVE'
 
   const onPickFiles = (e) => {

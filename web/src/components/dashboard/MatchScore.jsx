@@ -9,7 +9,7 @@ export const MatchScoreRing = ({ score, size = 56 }) => {
                 <circle cx={size/2} cy={size/2} r={r} stroke="currentColor" strokeWidth="5" fill="none" strokeDasharray={c} strokeDashoffset={o} strokeLinecap="round" className={scoreTone(score)} />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-                <span className={`text-sm font-semibold tabular-nums ${scoreTone(score)}`}>{score}</span>
+                <span className={`text-sm font-semibold tabular-nums ${scoreTone(score)}`}>{score}%</span>
             </div>
         </div>
     )

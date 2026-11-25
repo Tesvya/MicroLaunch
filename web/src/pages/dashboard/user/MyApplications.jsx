@@ -44,7 +44,7 @@ const MyApplications = () => {
                       <p className="mt-1 text-xs text-ink-muted">{[l?.workMode, l?.payAmountMin ? `\u20b1${l.payAmountMin}\u2013${l.payAmountMax}` : null, `Applied ${new Date(app.applicationDate).toLocaleDateString()}`].filter(Boolean).join(' \u00b7 ')}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {l?._id ? <Link to={`/app/explore/${l._id}`} className="inline-flex items-center gap-1 rounded-xl border border-ink-faint/30 px-3 py-1.5 text-xs font-medium text-ink-muted hover:border-ink-900/40 hover:text-ink-900">{app.applicationStatus === 'CANCELLED' ? 'Apply again' : 'View listing'} <LuArrowRight className="h-3 w-3" /></Link> : null}
+                      {l?._id ? <Link to={`/app/explore/${l._id}`} className="inline-flex items-center gap-1 rounded-xl border border-ink-faint/30 px-3 py-1.5 text-xs font-medium text-ink-muted hover:border-ink-900/40 hover:text-ink-900">{['CANCELLED', 'REJECTED'].includes(app.applicationStatus) && l.status === 'ACTIVE' ? 'Apply again' : 'View listing'} <LuArrowRight className="h-3 w-3" /></Link> : null}
                       {app.applicationStatus === 'PENDING' ? <button onClick={() => handleCancel(app._id)} disabled={cancellingId === app._id} className="inline-flex items-center gap-1 rounded-xl border border-danger-600/30 px-3 py-1.5 text-xs font-medium text-danger-600 hover:bg-danger-100 disabled:opacity-50"><LuX className="h-3 w-3" />{cancellingId === app._id ? 'Cancelling...' : 'Cancel'}</button> : null}
                     </div>
                   </div>

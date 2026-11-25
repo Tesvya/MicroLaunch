@@ -356,7 +356,9 @@ check('a rejection is final: rejecting again -> 409', r.status === 409)
 r = await status(app1._id, 'APPROVED')
 check('a rejected application cannot be approved afterwards -> 409', r.status === 409)
 r = await U1.req('POST', '/applications', { sideHustleId: L1._id })
-check('a rejected applicant cannot simply re-apply -> 409', r.status === 409)
+check('a rejected applicant can re-apply: same record, back to PENDING, old reason cleared', r.status === 201 && r.data.properties.application._id === app1._id && r.data.properties.application.applicationStatus === 'PENDING' && r.data.properties.application.decisionMessage === '', JSON.stringify(r.data))
+r = await U1.req('POST', '/applications', { sideHustleId: L1._id })
+check('a pending re-application cannot be duplicated -> 409', r.status === 409)
 r = await admin.req('GET', '/activity-logs'); check('rejection is in the activity log', r.data?.properties?.logs?.some((l) => l.activity.startsWith('Rejected application')))
 
 // --- openings: cap, auto-close, reopen ---

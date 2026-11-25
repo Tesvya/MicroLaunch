@@ -39,10 +39,10 @@ export const applyToSideHustle = async (req, res) => {
 
         const fields = { coverNote: coverNote || '', recommendationId: mongoose.isValidObjectId(recommendationId) ? recommendationId : null }
         let application = await Application.findOne({ userId: req.user._id, sideHustleId })
-        if (application && application.applicationStatus !== 'CANCELLED') return res.status(409).json({ message: 'You have already applied to this opportunity' })
+        if (application && !['CANCELLED', 'REJECTED'].includes(application.applicationStatus)) return res.status(409).json({ message: 'You have already applied to this opportunity' })
 
         if (application) {
-            // Re-applying after cancelling (e.g. forgot to attach a resume): reuse the record, drop the old files
+            // Re-applying after cancelling or being rejected: reuse the record, drop the old files
             await ApplicationFile.deleteMany({ applicationId: application._id })
             application.set({ ...fields, applicationStatus: 'PENDING', attachments: [], decisionMessage: '', decidedAt: null, decidedBy: null, applicationDate: new Date(), updatedAt: new Date() })
             await application.save()
@@ -116,7 +116,7 @@ export const listAllApplications = async (req, res) => {
     } catch (error) { return res.status(500).json({ message: error.message }) }
 }
 
-// Allowed moves. REJECTED / COMPLETED / CANCELLED are final.
+// Allowed moves. REJECTED / COMPLETED / CANCELLED are final for admins; the applicant may re-apply after REJECTED or CANCELLED.
 const ALLOWED = { PENDING: ['APPROVED', 'REJECTED'], APPROVED: ['COMPLETED', 'REJECTED'] }
 
 export const updateApplicationStatus = async (req, res) => {

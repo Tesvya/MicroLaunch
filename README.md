@@ -74,6 +74,6 @@ npm run smoke -- https://your-site.onrender.com   # read-only checks for a live 
 ## Applications, files, favorites (latest update)
 - Applicants can attach up to 3 files (PDF, PNG, JPG, DOC, DOCX; 3 MB each, change with `UPLOAD_MAX_MB`). Types are checked by file content, not just the extension.
 - Files are stored in MongoDB (`applicationfiles` collection) and count toward your Atlas M0 512 MB storage.
-- Admins see the applicant's message, profile summary and files on the Applications page. Rejecting requires a reason (min 10 chars) that is sent to the applicant as a notification and email.
+- Admins see the applicant's message, profile summary and files on the Applications page. Rejecting requires a reason (min 10 chars) that is sent to the applicant as a notification and email. Rejected applicants can apply again while the listing is open.
 - Listings have "Applicants needed" (`openings`); a listing closes automatically when all openings are approved. Older listings with no number are uncapped until edited.
 - "Save" is now "Favorite" with a Favorites page. Wording lives in `web/src/shared/labels.js`.
