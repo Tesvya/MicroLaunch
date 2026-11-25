@@ -3,11 +3,12 @@ import UserProfile from '../profile/models/user-profile.model.js'
 import RecommendationLog from './models/recommendation-log.model.js'
 import { rankSideHustlesHybrid } from '../ml/hybridEngine.js'
 import { getMetrics } from '../ml/modelLoader.js'
+import { withFilledCounts } from '../applications/filledCounts.js'
 export const getMyRecommendations = async (req, res) => {
     try {
         const profile = await UserProfile.findOne({ userId: req.user._id }).lean()
         if (!profile) return res.status(400).json({ message: 'Complete your profile first to get recommendations' })
-        const listings = await SideHustle.find({ status: 'ACTIVE' }).lean()
+        const listings = await withFilledCounts(await SideHustle.find({ status: 'ACTIVE' }).lean())
         const ranked = rankSideHustlesHybrid(profile, listings, Number(req.query.minScore)||0)
         const top = ranked.slice(0, Number(req.query.limit)||20)
         if (top.length) RecommendationLog.insertMany(top.map((e)=>({ userId: req.user._id, sideHustleId: e.listing._id, score: e.score, breakdown: e.breakdown }))).catch(()=>{})

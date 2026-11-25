@@ -5,13 +5,13 @@ import { useAdminStore } from '../../../store/admin/admin.store'
 import { Card, Badge } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
 import { Field, Input, Textarea, Select } from '../../../components/ui/Input'
-const emptyForm = { title:'',description:'',requiredSkills:'',category:'',experienceLevelRequired:'NONE',estimatedWeeklyHours:0,workMode:'REMOTE',location:'',payType:'PER_TASK',payAmountMin:0,payAmountMax:0,status:'ACTIVE' }
+const emptyForm = { title:'',description:'',requiredSkills:'',category:'',experienceLevelRequired:'NONE',estimatedWeeklyHours:0,workMode:'REMOTE',location:'',payType:'PER_TASK',payAmountMin:0,payAmountMax:0,openings:1,status:'ACTIVE' }
 const ListingForm = ({ initial, onSubmit, onCancel }) => {
   const [form, setForm] = useState(initial ? { ...emptyForm, ...initial, requiredSkills:(initial.requiredSkills||[]).join(', '), category:(initial.category||[]).join(', ') } : emptyForm)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const handleSubmit = async (e) => {
     e.preventDefault(); setIsSubmitting(true)
-    try { await onSubmit({ ...form, requiredSkills: form.requiredSkills.split(',').map((s)=>s.trim()).filter(Boolean), category: form.category.split(',').map((s)=>s.trim()).filter(Boolean), estimatedWeeklyHours: Number(form.estimatedWeeklyHours)||0, payAmountMin: Number(form.payAmountMin)||0, payAmountMax: Number(form.payAmountMax)||0 }) }
+    try { await onSubmit({ ...form, requiredSkills: form.requiredSkills.split(',').map((s)=>s.trim()).filter(Boolean), category: form.category.split(',').map((s)=>s.trim()).filter(Boolean), estimatedWeeklyHours: Number(form.estimatedWeeklyHours)||0, payAmountMin: Number(form.payAmountMin)||0, payAmountMax: Number(form.payAmountMax)||0, openings: Math.max(1, Math.floor(Number(form.openings)||1)) }) }
     catch (e) { toast.error(e?.response?.data?.message||'Could not save listing') }
     finally { setIsSubmitting(false) }
   }
@@ -36,6 +36,7 @@ const ListingForm = ({ initial, onSubmit, onCancel }) => {
         <Field label="Pay min (PHP)"><Input type="number" min="0" value={form.payAmountMin} onChange={(e)=>setForm({...form,payAmountMin:e.target.value})} /></Field>
         <Field label="Pay max (PHP)"><Input type="number" min="0" value={form.payAmountMax} onChange={(e)=>setForm({...form,payAmountMax:e.target.value})} /></Field>
       </div>
+      <Field label="Applicants needed" hint="How many people you plan to approve. The listing closes automatically once all openings are filled."><Input type="number" min="1" max="1000" value={form.openings ?? ''} onChange={(e)=>setForm({...form,openings:e.target.value})} required /></Field>
       <Field label="Status"><Select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})}><option value="ACTIVE">Active</option><option value="DRAFT">Draft</option><option value="CLOSED">Closed</option></Select></Field>
       <div className="flex gap-2 pt-2"><Button type="submit" variant="accent" isLoading={isSubmitting}>{initial?'Save changes':'Create listing'}</Button><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button></div>
     </form>
@@ -60,7 +61,7 @@ const AdminListings = () => {
         <div className="space-y-3">{sideHustles.map((s)=>(
           <Card key={s._id}>
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div><div className="mb-1 flex flex-wrap items-center gap-2"><h3 className="font-semibold text-ink-900">{s.title}</h3><Badge tone={s.status==='ACTIVE'?'success':s.status==='DRAFT'?'neutral':'danger'}>{s.status}</Badge></div><p className="line-clamp-1 text-sm text-ink-muted">{s.description}</p></div>
+              <div><div className="mb-1 flex flex-wrap items-center gap-2"><h3 className="font-semibold text-ink-900">{s.title}</h3><Badge tone={s.status==='ACTIVE'?'success':s.status==='DRAFT'?'neutral':'danger'}>{s.status}</Badge></div><p className="line-clamp-1 text-sm text-ink-muted">{s.description}</p><p className="mt-1 text-xs text-ink-muted">{s.openings ? `${s.approvedCount || 0} of ${s.openings} openings filled` : 'No opening limit set \u2014 edit to add one'}</p></div>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost" className="border border-ink-faint/30" onClick={()=>setFormMode(s)}><LuPencil className="h-3.5 w-3.5" /></Button>
                 <Button size="sm" variant="ghost" className="border border-ink-faint/30 text-danger-600" onClick={()=>handleDelete(s._id)}><LuTrash2 className="h-3.5 w-3.5" /></Button>

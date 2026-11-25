@@ -1,4 +1,3 @@
-
 import { Resend } from 'resend';
 
 export const isMailConfigured = () =>
@@ -62,3 +61,17 @@ This link expires in 24 hours. If you did not create an account, you can ignore 
 <p style="font-size:13px;color:#6b7280">Or paste this link into your browser:<br>${url}</p>
 <p style="font-size:13px;color:#6b7280">This link expires in 24 hours. If you did not create an account, you can ignore this email.</p></div>`
 });
+
+const nl2br = (t = '') => escapeHtml(t).replace(/\n/g, '<br>')
+export const decisionEmail = ({ name, listingTitle, status, message, siteUrl }) => {
+    const approved = status === 'APPROVED'
+    const subject = approved ? `Your application was approved: ${listingTitle}` : `Update on your application: ${listingTitle}`
+    const intro = approved ? `Good news! Your application for "${listingTitle}" has been approved.` : `Thank you for applying to "${listingTitle}". Unfortunately your application was not approved this time.`
+    const label = approved ? 'Message from the admin' : 'Reason'
+    const text = `Hi ${name},\n\n${intro}\n\n${message ? `${label}: ${message}\n\n` : ''}You can see the details any time under My Applications: ${siteUrl}/app/applications`
+    const html = `<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#14213d">
+<h2 style="margin-bottom:4px">Hi ${escapeHtml(name)},</h2><p>${escapeHtml(intro)}</p>
+${message ? `<div style="background:#f7f7f2;border-left:4px solid #fca311;padding:12px 14px;border-radius:6px;margin:16px 0"><strong>${label}:</strong><br>${nl2br(message)}</div>` : ''}
+<p><a href="${siteUrl}/app/applications" style="color:#14213d;font-weight:bold">View it under My Applications</a></p></div>`
+    return { subject, text, html }
+}

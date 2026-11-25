@@ -56,10 +56,6 @@ PAYPAL_MODE=sandbox
 | Reports | Admin generates 6 report types |
 | Activity Logs | Audit trail of all admin actions |
 
-## Deployment
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the step-by-step guide (MongoDB Atlas + Render, free tier). `render.yaml` is included.
-The default admin login (`admin@microlaunch.local` / `Admin12345!`) is for **local development only**; the seed script refuses it on a real database.
-
 ## Email verification
 New accounts must verify their email before logging in (24-hour single-use link; only a hash of the token is stored).
 - **Development (no SMTP set):** the link is printed in the server console and shown on the "Check your email" screen.
@@ -74,3 +70,10 @@ npm run test:gateways   # GCash/Maya/PayPal flows against a simulated provider (
 npm run test:hardening  # production-mode safety guards, rate limiting, headers (34 checks)
 npm run smoke -- https://your-site.onrender.com   # read-only checks for a live deployment (16 checks)
 ```
+
+## Applications, files, favorites (latest update)
+- Applicants can attach up to 3 files (PDF, PNG, JPG, DOC, DOCX; 3 MB each, change with `UPLOAD_MAX_MB`). Types are checked by file content, not just the extension.
+- Files are stored in MongoDB (`applicationfiles` collection) and count toward your Atlas M0 512 MB storage.
+- Admins see the applicant's message, profile summary and files on the Applications page. Rejecting requires a reason (min 10 chars) that is sent to the applicant as a notification and email.
+- Listings have "Applicants needed" (`openings`); a listing closes automatically when all openings are approved. Older listings with no number are uncapped until edited.
+- "Save" is now "Favorite" with a Favorites page. Wording lives in `web/src/shared/labels.js`.

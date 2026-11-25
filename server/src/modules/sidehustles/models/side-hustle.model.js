@@ -8,6 +8,8 @@ const sideHustleSchema = new mongoose.Schema({
     requiredDays: { type: [String], enum: ['MON','TUE','WED','THU','FRI','SAT','SUN'], default: [] },
     location: { type: String, default: '' }, payType: { type: String, enum: ['HOURLY','PER_TASK','FIXED','COMMISSION'], default: 'PER_TASK' },
     payAmountMin: { type: Number, default: 0, min: 0 }, payAmountMax: { type: Number, default: 0, min: 0 },
+    // How many applicants the admin wants to accept. null = not specified (no cap), e.g. listings created before this field existed.
+    openings: { type: Number, min: 1, default: null },
     status: { type: String, enum: ['ACTIVE','CLOSED','DRAFT'], default: 'ACTIVE' },
     suitableFor: { type: [String], enum: ['STUDENT','FREELANCER','UNEMPLOYED','PART_TIME_WORKER','SENIOR_CITIZEN','PWD','OTHER'], default: [] },
     postedByAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

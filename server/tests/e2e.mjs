@@ -232,7 +232,7 @@ check('admin lists users', !!tUser)
   check('manual verification recorded in the activity log', lg.some((l) => l.activity.includes('Manually verified email')))
 }
 check('admin user list does not leak verification token hash', !JSON.stringify(users).includes('emailVerificationTokenHash'))
-r = await admin.req('POST', '/side-hustles', { title: 'E2E Listing', description: 'test listing', requiredSkills: ['testing'], category: ['qa'], workMode: 'REMOTE', payType: 'FIXED', payAmountMin: 100, payAmountMax: 200 })
+r = await admin.req('POST', '/side-hustles', { title: 'E2E Listing', description: 'test listing', requiredSkills: ['testing'], category: ['qa'], workMode: 'REMOTE', payType: 'FIXED', payAmountMin: 100, payAmountMax: 200, openings: 3 })
 check('admin creates listing', r.status === 201, JSON.stringify(r.data))
 const newId = r.data?.properties?.sideHustle?._id
 r = await admin.req('PUT', `/side-hustles/${newId}`, { title: 'E2E Listing Edited' })
@@ -259,6 +259,174 @@ r = await u2.req('POST', '/auth/login', { email, password: 'Password123' })
 check('reactivated user can log in', r.status === 200)
 r = await user.req('POST', '/auth/logout')
 check('logout', r.status === 200)
+
+
+// ===================== NEW: files, decisions, openings, favorites =====================
+console.log('') // (section marker in raw output)
+const bytesPdf = (n = 200) => Buffer.concat([Buffer.from('%PDF-1.4\n% test resume\n'), Buffer.alloc(n, 0x20)])
+const bytesPng = () => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 0)])
+const formWith = (fields, files = []) => { const f = new FormData(); for (const [k, v] of Object.entries(fields)) f.append(k, v); for (const x of files) f.append('files', new Blob([x.bytes], { type: x.type || 'application/octet-stream' }), x.name); return f }
+const send = async (c, method, path, body) => { const res = await fetch(BASE + path, { method, headers: c.cookie ? { Cookie: c.cookie } : {}, body }); let data = null; try { data = await res.json() } catch {} return { status: res.status, data } }
+const fetchFile = async (c, id) => { const res = await fetch(BASE + `/applications/files/${id}`, { headers: c.cookie ? { Cookie: c.cookie } : {} }); return { status: res.status, headers: res.headers, bytes: Buffer.from(await res.arrayBuffer()) } }
+const newUser = async (label) => {
+  const c = new Client(label); const em = `${label}${Date.now()}${Math.floor(Math.random() * 1e5)}@example.com`
+  const q = await c.req('POST', '/auth/register', { name: `${label} user`, email: em, password: 'Password123', confirmPassword: 'Password123' })
+  await c.req('POST', '/auth/verify-email', { token: new URL(q.data.properties.devVerificationUrl).searchParams.get('token') })
+  await c.req('POST', '/auth/login', { email: em, password: 'Password123' }); c.email = em; return c
+}
+const mkListing = async (title, openings) => (await admin.req('POST', '/side-hustles', { title, description: 'listing created by the automated tests', requiredSkills: ['testing'], category: ['qa'], workMode: 'REMOTE', payType: 'FIXED', payAmountMin: 100, payAmountMax: 200, openings })).data?.properties?.sideHustle
+const status = (id, applicationStatus, decisionMessage) => admin.req('PATCH', `/applications/${id}/status`, { applicationStatus, ...(decisionMessage !== undefined ? { decisionMessage } : {}) })
+
+// --- openings field on listings ---
+r = await admin.req('POST', '/side-hustles', { title: 'No openings', description: 'x', requiredSkills: [], category: [] })
+check('listing without "applicants needed" is rejected (400)', r.status === 400 && /applicants/i.test(r.data?.message || ''), JSON.stringify(r.data))
+r = await admin.req('POST', '/side-hustles', { title: 'Zero', description: 'x', requiredSkills: [], category: [], openings: 0 })
+check('openings = 0 rejected (400)', r.status === 400)
+r = await admin.req('POST', '/side-hustles', { title: 'Fraction', description: 'x', requiredSkills: [], category: [], openings: 2.5 })
+check('openings = 2.5 rejected (400)', r.status === 400)
+const L1 = await mkListing('Upload Test Listing', 3)
+check('listing stores openings', L1?.openings === 3)
+
+// --- applying with files ---
+const U1 = await newUser('applicant')
+await U1.req('PUT', '/profile/me', { skills: ['writing', 'excel'], interests: ['writing'], qualifications: 'BSIT', experienceLevel: 'BEGINNER', weeklyAvailabilityHours: 10, availableDays: ['MON'], preferredWorkMode: 'REMOTE', userGroup: 'STUDENT', monthlyIncomeGoal: 1000, savingsGoal: 0, location: 'Cebu' })
+const resume = { name: 'Résumé Juan Peña.pdf', bytes: bytesPdf(), type: 'application/pdf' }
+const cert = { name: 'TESDA-certificate.png', bytes: bytesPng(), type: 'image/png' }
+r = await send(U1, 'POST', '/applications', formWith({ sideHustleId: L1._id, coverNote: 'I have 3 years experience; resume attached.' }, [resume, cert]))
+check('apply with 2 files (multipart)', r.status === 201, JSON.stringify(r.data))
+const app1 = r.data?.properties?.application
+check('both attachments recorded', app1?.attachments?.length === 2)
+check('response carries file metadata only, never the file bytes', !JSON.stringify(app1).includes('"data"'))
+check('UTF-8 file name survives the upload', app1?.attachments?.[0]?.originalName === 'Résumé Juan Peña.pdf', app1?.attachments?.[0]?.originalName)
+check('stored types come from the file contents (pdf + png)', app1?.attachments?.[0]?.mimeType === 'application/pdf' && app1?.attachments?.[1]?.mimeType === 'image/png')
+
+// --- unsafe / invalid uploads ---
+const U2 = await newUser('badfiles'); const L2 = await mkListing('Bad Files Listing', 5)
+const tryUpload = (files) => send(U2, 'POST', '/applications', formWith({ sideHustleId: L2._id }, files))
+r = await tryUpload([{ name: 'resume.pdf', bytes: Buffer.concat([Buffer.from('MZ'), Buffer.alloc(300, 1)]), type: 'application/pdf' }])
+check('Windows executable renamed .pdf is rejected (400)', r.status === 400 && r.data.message.includes('not a supported file'), JSON.stringify(r.data))
+r = await tryUpload([{ name: 'resume.pdf', bytes: Buffer.from('<html><script>alert(document.cookie)</script></html>'), type: 'application/pdf' }])
+check('HTML/script file disguised as .pdf is rejected (400)', r.status === 400)
+r = await tryUpload([{ name: 'photo.png', bytes: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>'), type: 'image/png' }])
+check('SVG disguised as .png is rejected (400)', r.status === 400)
+r = await tryUpload([{ name: 'a.pdf', bytes: bytesPdf(), type: 'application/pdf' }, { name: 'b.pdf', bytes: bytesPdf(), type: 'application/pdf' }, { name: 'c.pdf', bytes: bytesPdf(), type: 'application/pdf' }, { name: 'd.pdf', bytes: bytesPdf(), type: 'application/pdf' }])
+check('4 files rejected: the limit is 3 (400)', r.status === 400 && /up to 3/.test(r.data?.message || ''), JSON.stringify(r.data))
+r = await tryUpload([{ name: 'huge.pdf', bytes: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(3 * 1024 * 1024)]), type: 'application/pdf' }])
+check('file over 3 MB rejected (413)', r.status === 413, `status=${r.status}`)
+r = await U2.req('GET', '/applications/me')
+check('none of the failed uploads created an application', r.data?.properties?.applications?.length === 0)
+r = await send(new Client('anon'), 'POST', '/applications', formWith({ sideHustleId: L2._id }, [resume]))
+check('anonymous upload refused before the files are read (401)', r.status === 401)
+r = await U2.req('POST', '/applications', { sideHustleId: L2._id, coverNote: 'plain JSON still works' })
+check('plain JSON application (no files) still works', r.status === 201)
+
+// --- downloads + access control ---
+const f0 = app1.attachments[0]
+let d = await fetchFile(U1, f0.fileId)
+check('applicant downloads their own file, bytes identical', d.status === 200 && d.bytes.equals(resume.bytes))
+check('served as attachment, verified type, nosniff, no-store', /attachment/.test(d.headers.get('content-disposition')) && d.headers.get('content-type').startsWith('application/pdf') && d.headers.get('x-content-type-options') === 'nosniff' && /no-store/.test(d.headers.get('cache-control')))
+check('download keeps the unicode file name', decodeURIComponent(d.headers.get('content-disposition')).includes('Résumé Juan Peña.pdf'))
+d = await fetchFile(admin, f0.fileId); check('admin can download it', d.status === 200 && d.bytes.equals(resume.bytes))
+d = await fetchFile(U2, f0.fileId); check("another user cannot download someone else's file (404)", d.status === 404)
+d = await fetchFile(new Client('anon'), f0.fileId); check('anonymous cannot download (401)', d.status === 401)
+d = await fetchFile(admin, 'not-an-id'); check('bad file id -> 404, not a crash', d.status === 404)
+
+// --- what the admin sees ---
+r = await admin.req('GET', '/applications/admin/all')
+const row = r.data?.properties?.applications?.find((a) => a._id === app1._id)
+check('admin sees the applicant message', row?.coverNote?.includes('3 years experience'))
+check('admin sees the attached files', row?.attachments?.length === 2 && row.attachments[1].originalName === 'TESDA-certificate.png')
+check("admin sees the applicant's profile (skills, qualifications)", row?.applicantProfile?.skills?.includes('writing') && row.applicantProfile.qualifications === 'BSIT')
+check('admin sees the listing openings and how many are filled', row?.sideHustleId?.openings === 3 && row.approvedCount === 0)
+
+// --- rejection needs a reason, and the applicant receives it ---
+r = await status(app1._id, 'REJECTED')
+check('rejecting with no reason is refused (400)', r.status === 400 && /reason/i.test(r.data?.message || ''), JSON.stringify(r.data))
+r = await status(app1._id, 'REJECTED', 'too short')
+check('a one-word reason is refused (400)', r.status === 400)
+const reason = 'Your TESDA certificate has expired. Please renew it and apply again.'
+r = await status(app1._id, 'REJECTED', reason)
+check('admin rejects with a reason', r.status === 200, JSON.stringify(r.data))
+r = await U1.req('GET', '/applications/me'); const mine = r.data?.properties?.applications?.find((a) => a._id === app1._id)
+check('applicant sees status REJECTED and the exact reason', mine?.applicationStatus === 'REJECTED' && mine?.decisionMessage === reason)
+r = await U1.req('GET', '/notifications'); const nt = r.data?.properties?.notifications || []
+check('applicant is notified, reason included', nt.some((n) => n.title === 'Application not approved' && n.message.includes(`Reason: ${reason}`)))
+r = await status(app1._id, 'REJECTED', 'Rejecting this a second time for no reason')
+check('a rejection is final: rejecting again -> 409', r.status === 409)
+r = await status(app1._id, 'APPROVED')
+check('a rejected application cannot be approved afterwards -> 409', r.status === 409)
+r = await U1.req('POST', '/applications', { sideHustleId: L1._id })
+check('a rejected applicant cannot simply re-apply -> 409', r.status === 409)
+r = await admin.req('GET', '/activity-logs'); check('rejection is in the activity log', r.data?.properties?.logs?.some((l) => l.activity.startsWith('Rejected application')))
+
+// --- openings: cap, auto-close, reopen ---
+const L3 = await mkListing('Single Opening Listing', 1)
+const A3 = await newUser('openA'), B3 = await newUser('openB'), C3 = await newUser('openC')
+const appA = (await A3.req('POST', '/applications', { sideHustleId: L3._id, coverNote: 'pick me' })).data.properties.application
+const appB = (await B3.req('POST', '/applications', { sideHustleId: L3._id, coverNote: 'or me' })).data.properties.application
+r = await status(appA._id, 'APPROVED', 'Please message us on Viber at 0917-000-0000 to start.')
+check('approve with an optional message', r.status === 200)
+r = await A3.req('GET', '/notifications')
+check('approval message reaches the applicant', r.data?.properties?.notifications?.some((n) => n.title === 'Application approved' && n.message.includes('Viber')))
+let list = (await admin.req('GET', '/side-hustles/admin/all')).data.properties.sideHustles; let l3 = list.find((x) => x._id === L3._id)
+check('listing closes automatically when its last opening is filled', l3?.status === 'CLOSED' && l3?.approvedCount === 1, JSON.stringify({ s: l3?.status, c: l3?.approvedCount }))
+r = await status(appB._id, 'APPROVED')
+check('approving beyond the openings is blocked (409)', r.status === 409 && /opening/i.test(r.data?.message || ''), JSON.stringify(r.data))
+r = await status(appB._id, 'REJECTED', 'The single opening was filled by another applicant.')
+check('the other applicant can still be rejected with a reason', r.status === 200)
+r = await C3.req('POST', '/applications', { sideHustleId: L3._id })
+check('nobody can apply to a closed listing (404)', r.status === 404)
+r = await A3.req('GET', '/side-hustles'); check('closed listing disappears from Browse', !r.data.properties.sideHustles.some((x) => x._id === L3._id))
+r = await admin.req('PUT', `/side-hustles/${L3._id}`, { openings: 2, status: 'ACTIVE' })
+check('admin raises openings and reopens the listing', r.status === 200)
+r = await A3.req('GET', '/side-hustles'); const shown = r.data.properties.sideHustles.find((x) => x._id === L3._id)
+check('Browse shows openings and how many are taken', shown?.openings === 2 && shown?.approvedCount === 1, JSON.stringify(shown && { o: shown.openings, c: shown.approvedCount }))
+r = await C3.req('POST', '/applications', { sideHustleId: L3._id, coverNote: 'now there is room' }); const appC = r.data?.properties?.application
+check('applying works again after reopening', r.status === 201)
+r = await status(appC._id, 'APPROVED'); check('second approval fits the raised cap', r.status === 200)
+r = await status(appA._id, 'COMPLETED'); check('approved -> completed', r.status === 200)
+r = await status(appA._id, 'REJECTED', 'Trying to reject a completed application.')
+check('a completed application is final (409)', r.status === 409)
+
+// --- cancel and re-apply (e.g. forgot to attach the resume) ---
+const R = await newUser('reapply'); const L4 = await mkListing('Reapply Listing', 5)
+r = await send(R, 'POST', '/applications', formWith({ sideHustleId: L4._id, coverNote: 'v1' }, []))
+check('apply with no files via the form works', r.status === 201 && r.data.properties.application.attachments.length === 0)
+const a4 = r.data.properties.application
+await R.req('PATCH', `/applications/${a4._id}/cancel`)
+r = await send(R, 'POST', '/applications', formWith({ sideHustleId: L4._id, coverNote: 'v2 with resume' }, [resume]))
+const a4b = r.data?.properties?.application
+check('can re-apply after cancelling, now with a file', r.status === 201 && a4b?._id === a4._id && a4b.applicationStatus === 'PENDING' && a4b.attachments.length === 1 && a4b.coverNote === 'v2 with resume', JSON.stringify(r.data))
+r = await R.req('GET', '/applications/me'); check('still exactly one application record', r.data.properties.applications.length === 1)
+r = await R.req('POST', '/applications', { sideHustleId: L4._id }); check('cannot apply twice while one is active (409)', r.status === 409)
+await R.req('PATCH', `/applications/${a4._id}/cancel`)
+r = await send(R, 'POST', '/applications', formWith({ sideHustleId: L4._id, coverNote: 'v3' }, [cert]))
+d = await fetchFile(R, a4b.attachments[0].fileId)
+check('files from the cancelled attempt are deleted on re-apply (404)', r.status === 201 && d.status === 404)
+
+// --- favorites (replaces the dead-end "save") ---
+const F = await newUser('fav')
+await F.req('PUT', '/profile/me', { skills: ['writing', 'social media'], interests: ['writing', 'marketing'], qualifications: 'x', experienceLevel: 'BEGINNER', weeklyAvailabilityHours: 12, availableDays: ['MON', 'WED'], preferredWorkMode: 'REMOTE', userGroup: 'STUDENT', monthlyIncomeGoal: 1000, savingsGoal: 0, location: 'Cebu' })
+r = await F.req('GET', '/favorites'); check('favorites start empty', r.status === 200 && r.data.properties.favorites.length === 0)
+r = await F.req('POST', `/favorites/${L1._id}`); check('add a favorite', r.status === 201)
+r = await F.req('POST', `/favorites/${L1._id}`); check('adding twice is harmless (idempotent)', r.status === 201)
+r = await F.req('GET', '/favorites'); const fv = r.data?.properties?.favorites
+check('favorites list shows it once, with listing details and openings', fv?.length === 1 && fv[0].sideHustle.title === 'Upload Test Listing' && fv[0].sideHustle.openings === 3 && typeof fv[0].sideHustle.approvedCount === 'number')
+r = await F.req('POST', '/favorites/not-an-id'); check('invalid id -> 400', r.status === 400)
+r = await F.req('POST', '/favorites/000000000000000000000000'); check('unknown listing -> 404', r.status === 404)
+r = await F.req('POST', `/favorites/${L2._id}`); check('can favorite another active listing', r.status === 201)
+r = await new Client('anon').req('GET', '/favorites'); check('favorites need a login (401)', r.status === 401)
+r = await admin.req('GET', '/favorites'); check('favorites are a user feature (admin 403)', r.status === 403)
+r = await F.req('DELETE', `/favorites/${L1._id}`); check('remove a favorite', r.status === 200)
+r = await F.req('DELETE', `/favorites/${L1._id}`); check('removing twice is harmless', r.status === 200)
+r = await F.req('GET', '/favorites'); check('only the other favorite remains', r.data.properties.favorites.length === 1 && r.data.properties.favorites[0].sideHustle._id === L2._id)
+r = await F.req('GET', '/recommendations/me'); const frecs = r.data?.properties?.recommendations || []
+check('recommendations carry openings info too', typeof frecs[0]?.sideHustle?.approvedCount === 'number')
+await new Promise((x) => setTimeout(x, 400))
+const fid = (await F.req('GET', '/auth/check-user')).data.properties.user._id
+await F.req('POST', `/favorites/${frecs[0].sideHustle._id}`); await new Promise((x) => setTimeout(x, 400))
+const logRow = await mongoose.connection.collection('recommendationlogs').findOne({ userId: new mongoose.Types.ObjectId(fid), sideHustleId: new mongoose.Types.ObjectId(frecs[0].sideHustle._id), userResponse: 'SAVED' })
+check('favoriting still feeds the recommendation feedback loop', !!logRow)
 
 console.log(results.join('\n'))
 console.log(`\n=== ${pass} passed, ${fail} failed (${pass + fail} total) ===`)

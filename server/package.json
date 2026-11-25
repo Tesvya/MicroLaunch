@@ -28,8 +28,9 @@
     "ml-random-forest": "^2.1.0",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.1",
+    "multer": "^2.5.0",
     "nodemailer": "^10.4.0",
-    "resend": "^6.38.1",
+    "resend": "^6.39.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { LuBookmark, LuX, LuArrowRight } from 'react-icons/lu'
+import { LuX, LuArrowRight } from 'react-icons/lu'
 import { useRecommendationsStore } from '../../../store/user/recommendations.store'
 import { Card, Badge } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
+import { FavoriteButton } from '../../../components/dashboard/FavoriteButton'
+import { OpeningsBadge } from '../../../components/dashboard/OpeningsBadge'
 import { MatchScoreRing, MatchScoreBreakdown } from '../../../components/dashboard/MatchScore'
 const formatPay = (s) => { const sfx = s.payType === 'HOURLY' ? '/hr' : ''; return s.payAmountMin && s.payAmountMax && s.payAmountMin !== s.payAmountMax ? `\u20b1${s.payAmountMin}\u2013${s.payAmountMax}${sfx}` : `\u20b1${s.payAmountMin || s.payAmountMax || 0}${sfx}` }
 const RecommendationCard = ({ entry, onRespond }) => {
@@ -18,12 +20,13 @@ const RecommendationCard = ({ entry, onRespond }) => {
           <div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-semibold text-ink-900">{sideHustle.title}</h3><Badge tone="amber">{sideHustle.workMode}</Badge></div>
           <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{sideHustle.description}</p>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-ink-muted"><span className="font-medium text-success-600">{formatPay(sideHustle)}</span><span>&middot;</span><span>{sideHustle.location || 'Remote'}</span></div>
+          <div className="mt-2"><OpeningsBadge sideHustle={sideHustle} /></div>
         </div>
       </div>
       <button onClick={() => setExpanded((e) => !e)} className="mt-4 text-xs font-medium text-ink-900 underline decoration-ink-faint underline-offset-4 hover:decoration-ink-900">{expanded ? 'Hide match details' : 'Why was this recommended?'}</button>
       {expanded ? <div className="mt-4 rounded-xl bg-canvas p-4"><MatchScoreBreakdown breakdown={breakdown} /></div> : null}
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="accent" onClick={() => onRespond(sideHustle._id, 'SAVED')}><LuBookmark className="h-3.5 w-3.5" /> Save</Button>
+        <FavoriteButton sideHustleId={sideHustle._id} variant="button" />
         <Link to={`/app/explore/${sideHustle._id}`}><Button size="sm" variant="ghost" className="border border-ink-faint/30">View details <LuArrowRight className="h-3.5 w-3.5" /></Button></Link>
         <Button size="sm" variant="ghost" className="ml-auto text-ink-muted" onClick={() => onRespond(sideHustle._id, 'DISMISSED')}><LuX className="h-3.5 w-3.5" /> Not for me</Button>
       </div>
@@ -34,7 +37,7 @@ const Recommendations = () => {
   const { recommendations, isLoading, errorMessage, fetchRecommendations, respond } = useRecommendationsStore()
   useEffect(() => { fetchRecommendations().catch(() => {}) }, [])
   const handleRespond = async (sideHustleId, responseType) => {
-    try { await respond(sideHustleId, responseType); if (responseType === 'SAVED') toast.success('Saved to your list') }
+    try { await respond(sideHustleId, responseType) }
     catch { toast.error('Could not record your response') }
   }
   return (

@@ -21,6 +21,7 @@ import activityLogRoutes from './modules/activitylogs/activitylogs.routes.js'
 import reportRoutes from './modules/reports/reports.routes.js'
 import paymentRoutes from './modules/payments/payments.routes.js'
 import adminRoutes from './modules/admin/admin.routes.js'
+import favoriteRoutes from './modules/favorites/favorites.routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isProduction = process.env.NODE_ENV === 'production'
@@ -70,6 +71,7 @@ app.use('/api/v1/activity-logs', activityLogRoutes)
 app.use('/api/v1/reports', reportRoutes)
 app.use('/api/v1/payments', paymentRoutes)
 app.use('/api/v1/admin', adminRoutes)
+app.use('/api/v1/favorites', favoriteRoutes)
 
 // One-service deployment: if the React app has been built (web/dist), serve it from this same server.
 // Same domain => no CORS problems and the login cookie stays first-party.

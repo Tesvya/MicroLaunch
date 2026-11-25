@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LuLayoutDashboard, LuSparkles, LuWallet, LuStar, LuUser, LuLogOut, LuUsers, LuBriefcase, LuGauge, LuClipboardList, LuBell, LuFileText, LuActivity, LuMenu, LuX, LuReceipt } from 'react-icons/lu'
+import { LuLayoutDashboard, LuSparkles, LuWallet, LuStar, LuUser, LuLogOut, LuUsers, LuBriefcase, LuGauge, LuClipboardList, LuBell, LuFileText, LuActivity, LuMenu, LuX, LuReceipt, LuHeart } from 'react-icons/lu'
+import { FAVORITE } from '../../shared/labels'
 import { useAuth } from '../../hooks/useAuth.hook'
 import { useAuthStore } from '../../store/auth/auth.store'
 import { useNotificationsStore } from '../../store/user/notifications.store'
@@ -8,6 +9,7 @@ import { useNotificationsStore } from '../../store/user/notifications.store'
 const USER_NAV = [
     { to: '/app/recommendations', label: 'Recommendations', icon: LuSparkles },
     { to: '/app/explore', label: 'Browse Side-Hustles', icon: LuBriefcase },
+    { to: '/app/favorites', label: FAVORITE.navLabel, icon: LuHeart },
     { to: '/app/applications', label: 'My Applications', icon: LuClipboardList },
     { to: '/app/income', label: 'Income Tracker', icon: LuWallet },
     { to: '/app/transactions', label: 'Transactions', icon: LuReceipt },

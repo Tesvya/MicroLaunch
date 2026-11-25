@@ -7,6 +7,7 @@ import Income from '../pages/dashboard/user/Income'
 import Ratings from '../pages/dashboard/user/Ratings'
 import Profile from '../pages/dashboard/user/Profile'
 import MyApplications from '../pages/dashboard/user/MyApplications'
+import Favorites from '../pages/dashboard/user/Favorites'
 import Notifications from '../pages/dashboard/user/Notifications'
 import Transactions from '../pages/dashboard/user/Transactions'
 import { PaymentSuccess, PaymentCancel } from '../pages/dashboard/user/PaymentRedirect'
@@ -18,6 +19,7 @@ export const UserRoutes = [
             { path: 'recommendations', element: <Recommendations /> },
             { path: 'explore', element: <Explore /> },
             { path: 'explore/:id', element: <SideHustleDetail /> },
+            { path: 'favorites', element: <Favorites /> },
             { path: 'applications', element: <MyApplications /> },
             { path: 'income', element: <Income /> },
             { path: 'transactions', element: <Transactions /> },
