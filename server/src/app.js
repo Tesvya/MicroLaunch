@@ -52,7 +52,7 @@ const limiter = (limit, extra = {}) => rateLimit({
     skip: () => !limitsEnabled(), message: { message: 'Too many attempts. Please wait a few minutes and try again.' }, ...extra
 })
 app.post('/api/v1/auth/login', limiter(Number(process.env.LOGIN_FAIL_LIMIT || 30), { skipSuccessfulRequests: true }))
-app.post(['/api/v1/auth/register', '/api/v1/auth/resend-verification', '/api/v1/auth/verify-email'], limiter(Number(process.env.AUTH_RATE_LIMIT_MAX || 100)))
+app.post(['/api/v1/auth/register', '/api/v1/auth/resend-verification', '/api/v1/auth/verify-email', '/api/v1/auth/forgot-password', '/api/v1/auth/reset-password'], limiter(Number(process.env.AUTH_RATE_LIMIT_MAX || 100)))
 
 app.get('/api/v1/health', (_req, res) => {
     const dbUp = mongoose.connection.readyState === 1

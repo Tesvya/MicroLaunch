@@ -99,6 +99,13 @@ const anon = new Client('anon')
 r = await anon.req('GET', '/recommendations/me')
 check('anonymous blocked (401)', r.status === 401)
 
+// ---- FORGOT PASSWORD (link delivery is covered by integration.mjs with a mock mail provider) ----
+r = await anon.req('POST', '/auth/forgot-password', { email })
+check('forgot password: generic 200, no link or token in the response', r.status === 200 && !JSON.stringify(r.data).includes('token'))
+r = await anon.req('POST', '/auth/forgot-password', { email: 'not-an-email' }); check('forgot password: invalid email -> 400', r.status === 400)
+r = await anon.req('POST', '/auth/reset-password', { token: 'a'.repeat(64), password: 'Password999', confirmPassword: 'Password999' }); check('reset with an unknown token -> 400', r.status === 400)
+r = await user.req('GET', '/auth/check-user'); check('requesting a reset does not log the user out', r.status === 200)
+
 // ---- PROFILE ----
 r = await user.req('GET', '/recommendations/me')
 check('recommendations without profile -> 400', r.status === 400)

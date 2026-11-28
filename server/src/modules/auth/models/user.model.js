@@ -14,6 +14,12 @@ const userSchema = new mongoose.Schema({
     emailVerificationTokenHash: { type: String, default: null, select: false },
     emailVerificationExpires: { type: Date, default: null, select: false },
     emailVerificationSentAt: { type: Date, default: null, select: false },
+    // Password reset: same approach as verification (hash only, single use, expires). sessionVersion ends older sessions.
+    passwordResetTokenHash: { type: String, default: null, select: false },
+    passwordResetExpires: { type: Date, default: null, select: false },
+    passwordResetSentAt: { type: Date, default: null, select: false },
+    passwordChangedAt: { type: Date, default: null, select: false },
+    sessionVersion: { type: Number, default: 0, select: false }, // copied into each login token; raising it logs out every existing session
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: null }
 })

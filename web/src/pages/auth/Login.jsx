@@ -35,6 +35,7 @@ const Login = () => {
           {unverifiedEmail ? <div className="mb-4"><ResendVerification email={unverifiedEmail} startCooldown={false} /></div> : null}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Field label="Email" error={errors.email?.message}><Input type="email" placeholder="you@example.com" error={errors.email} {...register('email', { required: 'Email is required' })} /></Field>
+            <div className="-mb-2 flex justify-end"><Link to="/forgot-password" className="text-xs font-medium text-ink-muted hover:text-ink-900 hover:underline">Forgot password?</Link></div>
             <Field label="Password" error={errors.password?.message}><Input type="password" placeholder="********" error={errors.password} {...register('password', { required: 'Password is required' })} /></Field>
             <Button type="submit" variant="accent" className="w-full" isLoading={isSubmitting}>Log in</Button>
           </form>

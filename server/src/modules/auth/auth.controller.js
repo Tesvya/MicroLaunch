@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt'
 import User from './models/user.model.js'
 import Role from './models/role.model.js'
 import { generateAccessToken, clearAuthCookies } from '../../shared/utils/generateJwt.js'
-import { sendMail, verificationEmail } from '../../shared/utils/mailer.js'
+import { sendMail, verificationEmail, passwordResetEmail } from '../../shared/utils/mailer.js'
 import { createNotification } from '../notifications/notifications.controller.js'
 import { publicClientUrl } from '../../shared/utils/urls.js'
 
@@ -140,10 +140,51 @@ export const resendVerification = async (req, res) => {
     }
 };
 
+const RESET_TTL_MS = 60 * 60 * 1000
+const resetGeneric = { message: 'If an account exists for that email, a password reset link has been sent.' }
+
+/** Same answer whether or not the account exists, so this cannot be used to find out who is registered. */
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.validatedData.body
+        const user = await User.findOne({ email }).select('+passwordResetSentAt')
+        if (!user || !user.isActive) return res.status(200).json(resetGeneric)
+        if (user.passwordResetSentAt && Date.now() - user.passwordResetSentAt.getTime() < RESEND_COOLDOWN_MS) return res.status(200).json(resetGeneric)
+        const token = crypto.randomBytes(32).toString('hex')
+        await User.updateOne({ _id: user._id }, { $set: { passwordResetTokenHash: hashToken(token), passwordResetExpires: new Date(Date.now() + RESET_TTL_MS) } }) // replaces any older link
+        const url = `${clientBase()}/reset-password?token=${token}`
+        let sent = false
+        try { sent = (await sendMail({ to: user.email, ...passwordResetEmail({ name: user.name, url }) })).sent }
+        catch (error) { console.error('[Password reset] Email failed:', error.message) }
+        if (sent) await User.updateOne({ _id: user._id }, { $set: { passwordResetSentAt: new Date() } }) // only a delivered email starts the cooldown
+        // Never returned to the browser (anyone could request it for any account); only printed for local development
+        else if (process.env.NODE_ENV !== 'production') console.log(`\n[Password reset:DEV] Email not configured. Reset link for ${user.email}:\n  ${url}\n`)
+        return res.status(200).json(resetGeneric)
+    } catch (error) { return res.status(500).json({ message: error.message }) }
+}
+
+export const resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.validatedData.body
+        const passwordHash = await bcrypt.hash(password, await bcrypt.genSalt(10))
+        // Atomic: the link works exactly once, even if submitted twice at the same moment
+        const user = await User.findOneAndUpdate(
+            { passwordResetTokenHash: hashToken(token), passwordResetExpires: { $gt: new Date() } },
+            // Opening the emailed link also proves the address, so an unverified account becomes verified
+            { $set: { password: passwordHash, passwordResetTokenHash: null, passwordResetExpires: null, passwordResetSentAt: null, passwordChangedAt: new Date(), isEmailVerified: true, emailVerificationTokenHash: null, emailVerificationExpires: null, updatedAt: new Date() }, $inc: { sessionVersion: 1 } },
+            { new: true }
+        )
+        if (!user) return res.status(400).json({ message: 'This reset link is invalid or has expired. Please request a new one.' })
+        await createNotification({ userId: user._id, notificationType: 'SYSTEM', title: 'Password changed', message: 'Your password was reset. If this was not you, reset it again right away and contact an administrator.' })
+        clearAuthCookies(res)
+        return res.status(200).json({ message: 'Your password has been reset. You can now log in.' })
+    } catch (error) { return res.status(500).json({ message: error.message }) }
+}
+
 export const login = async (req, res) => {
     try {
         const { email, password } = req.validatedData.body
-        const user = await User.findOne({ email }).populate('roleId')
+        const user = await User.findOne({ email }).populate('roleId').select('+sessionVersion')
         if (!user || !await bcrypt.compare(password, user.password)) return res.status(401).json({ message: 'Invalid credentials' })
         if (!user.isEmailVerified) return res.status(403).json({ code: 'EMAIL_NOT_VERIFIED', message: 'Please verify your email address before logging in. Check your inbox for the verification link.' })
         if (!user.isActive) return res.status(403).json({ message: 'This account has been suspended.' })

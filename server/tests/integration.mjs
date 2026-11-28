@@ -78,6 +78,50 @@ try {
     check('01.5', 'after the outage the user can resend immediately', mailTo(e2).length === 1)
   }
 
+  section('IT-08 Password reset <-> Email <-> Sessions')
+  {
+    const u = await newUser('reset'); const other = client()
+    await other.req('POST', '/auth/login', { email: u.email, password: 'Password123' })
+    const resetMails = () => mailTo(u.email).filter((m) => m.subject.includes('Reset your'))
+    const linkOf = (m) => m.text.match(/reset-password\?token=([a-f0-9]{64})/)[1]
+    r = await client().req('POST', '/auth/forgot-password', { email: 'nobody-here@example.com' })
+    const unknown = r.data.message
+    r = await client().req('POST', '/auth/forgot-password', { email: u.email })
+    check('08.1', 'known and unknown emails get the same answer; the link is only emailed', r.status === 200 && r.data.message === unknown && resetMails().length === 1 && !JSON.stringify(r.data).includes('token'), JSON.stringify(r.data))
+    await client().req('POST', '/auth/forgot-password', { email: u.email })
+    check('08.2', 'asking again within 60 seconds sends no second email', resetMails().length === 1)
+    const token = linkOf(resetMails()[0])
+    r = await client().req('POST', '/auth/reset-password', { token, password: 'short', confirmPassword: 'short' })
+    const r2 = await client().req('POST', '/auth/reset-password', { token, password: 'NewPassword456', confirmPassword: 'Different456' })
+    check('08.3', 'short or mismatched passwords are refused and the link stays usable', r.status === 400 && r2.status === 400)
+    const both = await Promise.all([1, 2].map(() => client().req('POST', '/auth/reset-password', { token, password: 'NewPassword456', confirmPassword: 'NewPassword456' })))
+    check('08.4', 'the link resets the password exactly once', both.filter((x) => x.status === 200).length === 1 && both.filter((x) => x.status === 400).length === 1, both.map((x) => x.status).join())
+    const oldLogin = await client().req('POST', '/auth/login', { email: u.email, password: 'Password123' }), newLogin = await client().req('POST', '/auth/login', { email: u.email, password: 'NewPassword456' })
+    check('08.5', 'the old password stops working and the new one works', oldLogin.status === 401 && newLogin.status === 200)
+    const s1 = await u.req('GET', '/auth/check-user'), s2 = await other.req('GET', '/auth/check-user')
+    check('08.6', 'sessions opened before the reset are logged out', s1.status === 401 && s2.status === 401, `${s1.status},${s2.status}`)
+    const fresh = client(); await fresh.req('POST', '/auth/login', { email: u.email, password: 'NewPassword456' })
+    check('08.7', 'the user is notified that the password changed', (await fresh.req('GET', '/notifications')).p.notifications.some((x) => x.title === 'Password changed'))
+    await mongoose.connection.collection('users').updateOne({ email: u.email }, { $set: { passwordResetSentAt: null } })
+    await client().req('POST', '/auth/forgot-password', { email: u.email })
+    const t2 = linkOf(resetMails().at(-1))
+    await mongoose.connection.collection('users').updateOne({ email: u.email }, { $set: { passwordResetExpires: new Date(Date.now() - 1000) } })
+    r = await client().req('POST', '/auth/reset-password', { token: t2, password: 'Another789xyz', confirmPassword: 'Another789xyz' })
+    check('08.8', 'an expired link is refused', r.status === 400)
+    const c = client(); const ue = `unverified${Date.now()}@example.com`
+    await c.req('POST', '/auth/register', { name: 'Unverified', email: ue, password: 'Password123', confirmPassword: 'Password123' })
+    await c.req('POST', '/auth/forgot-password', { email: ue })
+    const t3 = linkOf(mailTo(ue).find((m) => m.subject.includes('Reset your')))
+    await c.req('POST', '/auth/reset-password', { token: t3, password: 'Verified123', confirmPassword: 'Verified123' })
+    r = await c.req('POST', '/auth/login', { email: ue, password: 'Verified123' })
+    check('08.9', 'resetting through the emailed link also verifies an unverified account', r.status === 200, JSON.stringify(r.data))
+    await admin.req('PATCH', `/admin/users/${fresh.id || (await fresh.req('GET', '/auth/check-user')).p.user._id}/status`, { isActive: false })
+    const before = resetMails().length
+    await mongoose.connection.collection('users').updateOne({ email: u.email }, { $set: { passwordResetSentAt: null } })
+    r = await client().req('POST', '/auth/forgot-password', { email: u.email })
+    check('08.10', 'a suspended account gets the same answer but no email', r.status === 200 && r.data.message === unknown && resetMails().length === before)
+  }
+
   section('IT-02 Profile <-> PWD verification <-> Recommendations')
   {
     const u = await newUser('pwdrec')

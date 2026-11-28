@@ -62,6 +62,17 @@ This link expires in 24 hours. If you did not create an account, you can ignore 
 <p style="font-size:13px;color:#6b7280">This link expires in 24 hours. If you did not create an account, you can ignore this email.</p></div>`
 });
 
+export const passwordResetEmail = ({ name, url }) => ({
+    subject: 'Reset your MICROLAUNCH password',
+    text: `Hi ${name},\n\nWe received a request to reset your MICROLAUNCH password. Choose a new one here:\n${url}\n\nThis link expires in 1 hour and can only be used once. If you did not ask for this, ignore this email; your password stays the same.`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#14213d">
+<h2 style="margin-bottom:4px">Reset your password</h2>
+<p>Hi ${escapeHtml(name)}, we received a request to reset your MICROLAUNCH password.</p>
+<p style="margin:24px 0"><a href="${url}" style="background:#fca311;color:#14213d;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:bold">Choose a new password</a></p>
+<p style="font-size:13px;color:#6b7280">Or paste this link into your browser:<br>${url}</p>
+<p style="font-size:13px;color:#6b7280">This link expires in 1 hour and can only be used once. If you did not ask for this, ignore this email; your password stays the same.</p></div>`
+})
+
 const nl2br = (t = '') => escapeHtml(t).replace(/\n/g, '<br>')
 export const decisionEmail = ({ name, listingTitle, status, message, siteUrl }) => {
     const approved = status === 'APPROVED'
